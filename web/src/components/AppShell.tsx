@@ -13,7 +13,8 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { AppSidebar } from "@/components/app-sidebar";
-import { ProjectNav } from "@/components/project-nav";
+import { ProjectSidebar } from "@/components/project-sidebar";
+import { isProjectRoute } from "@/components/nav-items";
 import { useSession } from "@/lib/session";
 import { useProjects } from "@/lib/project";
 
@@ -48,13 +49,14 @@ export function AppShell() {
   }
   if (state === "anonymous") return null;
 
+  const projectMode = isProjectRoute(pathname);
   const page = pathname.startsWith("/services/") ? "Service" : (titles[pathname] ?? "Services");
   const showNew = canWrite && Boolean(project) && pathname !== "/" && pathname !== "/services/new";
   const showProjectCrumb = Boolean(project) && pathname !== "/";
 
   return (
     <SidebarProvider>
-      <AppSidebar />
+      {projectMode ? <ProjectSidebar /> : <AppSidebar />}
       <SidebarInset>
         <header className="flex h-14 shrink-0 items-center gap-2 border-b border-border px-4">
           <SidebarTrigger className="-ml-1" />
@@ -81,11 +83,8 @@ export function AppShell() {
             </Button>
           ) : null}
         </header>
-        <div className="flex flex-1 overflow-hidden">
-          <ProjectNav />
-          <div className="flex flex-1 flex-col gap-4 overflow-auto p-4 md:p-6">
-            <Outlet />
-          </div>
+        <div className="flex flex-1 flex-col gap-4 overflow-auto p-4 md:p-6">
+          <Outlet />
         </div>
       </SidebarInset>
     </SidebarProvider>

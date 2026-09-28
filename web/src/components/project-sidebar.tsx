@@ -1,12 +1,15 @@
-import { Link, useRouterState } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
+import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import { Activity } from "lucide-react";
-import { useSession } from "@/lib/session";
-import { slackApi } from "@/lib/api";
-import { cn } from "@/lib/utils";
-import { APP_NAV, isActivePath } from "@/components/nav-items";
+import { useProjects } from "@/lib/project";
+import { PROJECT_NAV, isActivePath } from "@/components/nav-items";
 import { UserMenu } from "@/components/user-menu";
-import { Badge } from "@/components/ui/badge";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Sidebar,
   SidebarContent,
@@ -20,19 +23,43 @@ import {
   SidebarRail,
 } from "@/components/ui/sidebar";
 
-export function AppSidebar() {
-  const { isAdmin } = useSession();
+export function ProjectSidebar() {
+  const { project, projects, select } = useProjects();
+  const navigate = useNavigate();
   const pathname = useRouterState({ select: (state) => state.location.pathname });
-  const slack = useQuery({ queryKey: ["slack"], queryFn: slackApi.status });
 
   return (
     <Sidebar collapsible="icon">
       <SidebarHeader>
-        <div className="flex items-center gap-2 px-2 py-1.5">
+        <Link
+          to="/"
+          className="flex items-center gap-2 px-2 py-1.5 text-foreground hover:opacity-80"
+          title="All projects"
+        >
           <Activity className="size-4 shrink-0 text-primary" />
           <span className="text-sm font-semibold tracking-tight group-data-[collapsible=icon]:hidden">
             big-brother
           </span>
+        </Link>
+        <div className="px-1 group-data-[collapsible=icon]:hidden">
+          <Select
+            value={project?.slug ?? ""}
+            onValueChange={(value) => {
+              select(value);
+              void navigate({ to: "/services" });
+            }}
+          >
+            <SelectTrigger className="w-full">
+              <SelectValue placeholder="Select project" />
+            </SelectTrigger>
+            <SelectContent>
+              {projects.map((item) => (
+                <SelectItem key={item.slug} value={item.slug}>
+                  {item.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
       </SidebarHeader>
 
@@ -40,7 +67,7 @@ export function AppSidebar() {
         <SidebarGroup>
           <SidebarGroupContent>
             <SidebarMenu>
-              {APP_NAV.filter((item) => !item.adminOnly || isAdmin).map((item) => {
+              {PROJECT_NAV.map((item) => {
                 const Icon = item.icon;
                 return (
                   <SidebarMenuItem key={item.to}>
@@ -48,19 +75,6 @@ export function AppSidebar() {
                       <Link to={item.to}>
                         <Icon />
                         <span>{item.label}</span>
-                        {item.to === "/integrations" ? (
-                          <Badge
-                            variant="outline"
-                            className={cn(
-                              "ml-auto group-data-[collapsible=icon]:hidden",
-                              slack.data?.connected
-                                ? "border-primary/40 bg-primary/10 text-primary"
-                                : "text-muted-foreground",
-                            )}
-                          >
-                            Slack
-                          </Badge>
-                        ) : null}
                       </Link>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
