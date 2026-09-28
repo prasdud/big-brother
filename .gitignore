@@ -27,6 +27,16 @@ go.work.sum
 # env file
 .env
 
+# local runtime data
+/data/
+/bin/
+/big-brother
+
+# web
+/web/node_modules/
+/internal/web/dist/*
+!/internal/web/dist/.gitkeep
+
 # Editor/IDE
 # .idea/
 # .vscode/
