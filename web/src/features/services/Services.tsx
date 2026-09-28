@@ -149,7 +149,10 @@ export function Services() {
         ) : (
           <span />
         )}
-        <h1 className="text-display text-muted-foreground">{project.name}</h1>
+        <div className="text-right">
+          <h1 className="text-display text-muted-foreground">{project.name}</h1>
+          {current ? <p className="text-sm text-muted-foreground">{current.name}</p> : null}
+        </div>
       </div>
 
       <div className="grid gap-4 lg:grid-cols-[minmax(360px,34%)_1fr]">
