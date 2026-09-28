@@ -1,7 +1,7 @@
 import { createRootRoute, createRoute, createRouter } from "@tanstack/react-router";
 import { AppShell } from "./components/AppShell";
 import { Login } from "./features/auth/Login";
-import { Dashboard } from "./features/dashboard/Dashboard";
+import { Services } from "./features/services/Services";
 import { Projects } from "./features/projects/Projects";
 import { ServiceForm } from "./features/services/ServiceForm";
 import { ServiceDetail } from "./features/services/ServiceDetail";
@@ -31,10 +31,10 @@ const projectsRoute = createRoute({
   component: Projects,
 });
 
-const dashboardRoute = createRoute({
+const servicesRoute = createRoute({
   getParentRoute: () => appRoute,
-  path: "/dashboard",
-  component: Dashboard,
+  path: "/services",
+  component: Services,
 });
 
 const serviceNewRoute = createRoute({
@@ -89,7 +89,7 @@ const routeTree = rootRoute.addChildren([
   loginRoute,
   appRoute.addChildren([
     projectsRoute,
-    dashboardRoute,
+    servicesRoute,
     serviceNewRoute,
     serviceEditRoute,
     serviceDetailRoute,

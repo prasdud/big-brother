@@ -46,7 +46,7 @@ function Stat({ label, value }: { label: string; value: number | string }) {
   );
 }
 
-export function Dashboard() {
+export function Services() {
   const { project, loading } = useProjects();
   const { canWrite } = useSession();
   const queryClient = useQueryClient();

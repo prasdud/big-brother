@@ -83,7 +83,7 @@ export function ServiceDetail() {
     onSuccess: () => {
       toast.success("Service deleted");
       void queryClient.invalidateQueries({ queryKey: ["services", slug] });
-      void navigate({ to: "/dashboard" });
+      void navigate({ to: "/services" });
     },
     onError: (error) => toast.error(errorMessage(error)),
   });

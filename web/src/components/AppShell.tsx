@@ -18,7 +18,7 @@ import { useProjects } from "@/lib/project";
 
 const titles: Record<string, string> = {
   "/": "Projects",
-  "/dashboard": "Dashboard",
+  "/services": "Services",
   "/alerts": "Alerts",
   "/deliveries": "Deliveries",
   "/slack": "Slack",
@@ -47,7 +47,7 @@ export function AppShell() {
   }
   if (state === "anonymous") return null;
 
-  const page = pathname.startsWith("/services/") ? "Service" : (titles[pathname] ?? "Dashboard");
+  const page = pathname.startsWith("/services/") ? "Service" : (titles[pathname] ?? "Services");
   const showNew = canWrite && Boolean(project) && pathname !== "/" && pathname !== "/services/new";
   const showProjectCrumb = Boolean(project) && pathname !== "/";
 

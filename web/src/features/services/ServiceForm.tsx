@@ -247,7 +247,7 @@ export function ServiceForm() {
             <Button type="submit" disabled={save.isPending}>
               {editing ? "Save changes" : "Create service"}
             </Button>
-            <Button type="button" variant="outline" onClick={() => void navigate({ to: "/dashboard" })}>
+            <Button type="button" variant="outline" onClick={() => void navigate({ to: "/services" })}>
               Cancel
             </Button>
           </div>

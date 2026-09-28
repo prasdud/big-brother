@@ -4,9 +4,9 @@ import {
   Bell,
   FolderKanban,
   Inbox,
-  LayoutDashboard,
   LogOut,
   MessageSquare,
+  Server,
   Settings,
   Users,
 } from "lucide-react";
@@ -43,7 +43,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 
 const NAV = [
   { to: "/", label: "Projects", icon: FolderKanban, exact: true, adminOnly: false },
-  { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard, exact: true, adminOnly: false },
+  { to: "/services", label: "Services", icon: Server, exact: true, adminOnly: false },
   { to: "/alerts", label: "Alerts", icon: Bell, exact: false, adminOnly: false },
   { to: "/deliveries", label: "Deliveries", icon: Inbox, exact: false, adminOnly: false },
   { to: "/slack", label: "Slack", icon: MessageSquare, exact: false, adminOnly: false },
@@ -72,7 +72,7 @@ export function AppSidebar() {
               value={project?.slug ?? ""}
               onValueChange={(value) => {
                 select(value);
-                void navigate({ to: "/dashboard" });
+                void navigate({ to: "/services" });
               }}
             >
               <SelectTrigger className="w-full">

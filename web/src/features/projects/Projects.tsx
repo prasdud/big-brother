@@ -44,7 +44,7 @@ function CreateProjectDialog() {
       setName("");
       setOpen(false);
       void queryClient.invalidateQueries({ queryKey: ["projects"] });
-      void navigate({ to: "/dashboard" });
+      void navigate({ to: "/services" });
     },
     onError: (error) => toast.error(errorMessage(error)),
   });
@@ -101,12 +101,12 @@ function ProjectCard({ project, count }: { project: Project; count: number | und
       className="cursor-pointer transition-colors hover:border-primary/60"
       onClick={() => {
         select(project.slug);
-        void navigate({ to: "/dashboard" });
+        void navigate({ to: "/services" });
       }}
       onKeyDown={(event) => {
         if (event.key === "Enter" || event.key === " ") {
           select(project.slug);
-          void navigate({ to: "/dashboard" });
+          void navigate({ to: "/services" });
         }
       }}
     >
