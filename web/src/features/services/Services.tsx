@@ -242,11 +242,11 @@ export function Services() {
                   >
                     <span
                       className={cn(
-                        "rounded-full px-2 py-0.5 text-xs font-medium tabular-nums",
+                        "inline-flex min-w-9 items-center justify-center rounded-full px-1.5 py-0.5 text-[11px] font-medium tabular-nums",
                         uptimePillClass(monitor),
                       )}
                     >
-                      {monitor.uptime_24h.toFixed(monitor.uptime_24h === 100 ? 0 : 2)}%
+                      {Math.round(monitor.uptime_24h)}%
                     </span>
                     <span className="text-muted-foreground">›</span>
                     <div className="min-w-0 flex-1">
