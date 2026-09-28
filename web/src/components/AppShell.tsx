@@ -22,7 +22,7 @@ const titles: Record<string, string> = {
   "/services": "Services",
   "/alerts": "Alerts",
   "/deliveries": "Deliveries",
-  "/slack": "Slack",
+  "/integrations": "Integrations",
   "/settings": "Settings",
   "/users": "Users",
   "/services/new": "New service",

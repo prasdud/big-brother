@@ -70,7 +70,7 @@ export function ChannelPicker({ project, service, currentChannelID, canWrite }: 
     return (
       <p className="text-sm text-muted-foreground">
         Slack is not connected.{" "}
-        <Link className="text-primary underline-offset-4 hover:underline" to="/slack">
+        <Link className="text-primary underline-offset-4 hover:underline" to="/integrations">
           Connect Slack
         </Link>{" "}
         to choose a channel.

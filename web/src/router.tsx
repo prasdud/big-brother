@@ -7,7 +7,7 @@ import { ServiceForm } from "./features/services/ServiceForm";
 import { ServiceDetail } from "./features/services/ServiceDetail";
 import { ProjectSettings } from "./features/projects/ProjectSettings";
 import { AlertSettings } from "./features/alerts/AlertSettings";
-import { SlackSettings } from "./features/slack/SlackSettings";
+import { Integrations } from "./features/integrations/Integrations";
 import { UsersSettings } from "./features/users/UsersSettings";
 import { Deliveries } from "./features/deliveries/Deliveries";
 
@@ -73,10 +73,10 @@ const deliveriesRoute = createRoute({
   component: Deliveries,
 });
 
-const slackRoute = createRoute({
+const integrationsRoute = createRoute({
   getParentRoute: () => appRoute,
-  path: "/slack",
-  component: SlackSettings,
+  path: "/integrations",
+  component: Integrations,
 });
 
 const usersRoute = createRoute({
@@ -96,7 +96,7 @@ const routeTree = rootRoute.addChildren([
     settingsRoute,
     alertsRoute,
     deliveriesRoute,
-    slackRoute,
+    integrationsRoute,
     usersRoute,
   ]),
 ]);

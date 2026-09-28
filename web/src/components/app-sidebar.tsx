@@ -1,8 +1,12 @@
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
-import { Activity, FolderKanban, LogOut, MessageSquare, Users } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { Activity, Blocks, FolderKanban, LogOut, Users } from "lucide-react";
 import { useSession } from "@/lib/session";
 import { useProjects } from "@/lib/project";
+import { slackApi } from "@/lib/api";
+import { cn } from "@/lib/utils";
 import { PROJECT_NAV } from "@/components/project-nav";
+import { Badge } from "@/components/ui/badge";
 import {
   Select,
   SelectContent,
@@ -35,7 +39,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 
 const NAV = [
   { to: "/", label: "Projects", icon: FolderKanban, exact: true, adminOnly: false },
-  { to: "/slack", label: "Slack", icon: MessageSquare, exact: false, adminOnly: false },
+  { to: "/integrations", label: "Integrations", icon: Blocks, exact: false, adminOnly: false },
   { to: "/users", label: "Users", icon: Users, exact: false, adminOnly: true },
 ] as const;
 
@@ -44,6 +48,7 @@ export function AppSidebar() {
   const { project, projects, select } = useProjects();
   const navigate = useNavigate();
   const pathname = useRouterState({ select: (state) => state.location.pathname });
+  const slack = useQuery({ queryKey: ["slack"], queryFn: slackApi.status });
 
   const initials = (user?.email ?? "dev").slice(0, 2).toUpperCase();
 
@@ -71,6 +76,19 @@ export function AppSidebar() {
                       <Link to={item.to}>
                         <Icon />
                         <span>{item.label}</span>
+                        {item.to === "/integrations" ? (
+                          <Badge
+                            variant="outline"
+                            className={cn(
+                              "ml-auto group-data-[collapsible=icon]:hidden",
+                              slack.data?.connected
+                                ? "border-primary/40 bg-primary/10 text-primary"
+                                : "text-muted-foreground",
+                            )}
+                          >
+                            Slack
+                          </Badge>
+                        ) : null}
                       </Link>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
