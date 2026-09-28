@@ -71,6 +71,7 @@ type Service struct {
 	ChannelID         string
 	TemplateDown      string
 	TemplateRecovered string
+	Tags              string
 	CreatedAt         string
 	UpdatedAt         string
 }

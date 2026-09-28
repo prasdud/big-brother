@@ -38,8 +38,32 @@ export interface Service {
   channel_id: string;
   template_down: string;
   template_recovered: string;
+  tags: string[];
   created_at: string;
   updated_at: string;
+}
+
+export interface Heartbeat {
+  status: string;
+  latency_ms: number;
+  checked_at: string;
+}
+
+export interface Monitor {
+  id: string;
+  name: string;
+  slug: string;
+  type: ServiceType;
+  url: string;
+  hostname: string;
+  port: number;
+  enabled: boolean;
+  tags: string[];
+  interval_seconds: number;
+  state: State;
+  uptime_24h: number;
+  uptime_30d: number;
+  heartbeats: Heartbeat[];
 }
 
 export interface Status {
@@ -107,4 +131,5 @@ export interface ServiceInput {
   failure_threshold: number;
   template_down: string;
   template_recovered: string;
+  tags: string[];
 }

@@ -87,15 +87,15 @@ const createService = `-- name: CreateService :exec
 INSERT INTO services (
     id, project_id, name, slug, type, url, hostname, port,
     interval_seconds, timeout_seconds, failure_threshold, enabled,
-    template_down, template_recovered,
+    template_down, template_recovered, tags,
     created_at, updated_at
 ) VALUES (
     ?1, ?2, ?3, ?4,
     ?5, ?6, ?7, ?8,
     ?9, ?10,
     ?11, ?12,
-    ?13, ?14,
-    ?15, ?16
+    ?13, ?14, ?15,
+    ?16, ?17
 )
 `
 
@@ -114,6 +114,7 @@ type CreateServiceParams struct {
 	Enabled           int64
 	TemplateDown      string
 	TemplateRecovered string
+	Tags              string
 	CreatedAt         string
 	UpdatedAt         string
 }
@@ -134,6 +135,7 @@ func (q *Queries) CreateService(ctx context.Context, arg CreateServiceParams) er
 		arg.Enabled,
 		arg.TemplateDown,
 		arg.TemplateRecovered,
+		arg.Tags,
 		arg.CreatedAt,
 		arg.UpdatedAt,
 	)
@@ -372,7 +374,7 @@ func (q *Queries) GetProjectBySlug(ctx context.Context, slug string) (Project, e
 }
 
 const getServiceByID = `-- name: GetServiceByID :one
-SELECT id, project_id, name, slug, type, url, hostname, port, interval_seconds, timeout_seconds, failure_threshold, enabled, next_run_at, channel_id, template_down, template_recovered, created_at, updated_at FROM services WHERE id = ?1
+SELECT id, project_id, name, slug, type, url, hostname, port, interval_seconds, timeout_seconds, failure_threshold, enabled, next_run_at, channel_id, template_down, template_recovered, tags, created_at, updated_at FROM services WHERE id = ?1
 `
 
 func (q *Queries) GetServiceByID(ctx context.Context, id string) (Service, error) {
@@ -395,6 +397,7 @@ func (q *Queries) GetServiceByID(ctx context.Context, id string) (Service, error
 		&i.ChannelID,
 		&i.TemplateDown,
 		&i.TemplateRecovered,
+		&i.Tags,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -402,7 +405,7 @@ func (q *Queries) GetServiceByID(ctx context.Context, id string) (Service, error
 }
 
 const getServiceBySlug = `-- name: GetServiceBySlug :one
-SELECT id, project_id, name, slug, type, url, hostname, port, interval_seconds, timeout_seconds, failure_threshold, enabled, next_run_at, channel_id, template_down, template_recovered, created_at, updated_at FROM services
+SELECT id, project_id, name, slug, type, url, hostname, port, interval_seconds, timeout_seconds, failure_threshold, enabled, next_run_at, channel_id, template_down, template_recovered, tags, created_at, updated_at FROM services
 WHERE project_id = ?1 AND slug = ?2
 `
 
@@ -431,6 +434,7 @@ func (q *Queries) GetServiceBySlug(ctx context.Context, arg GetServiceBySlugPara
 		&i.ChannelID,
 		&i.TemplateDown,
 		&i.TemplateRecovered,
+		&i.Tags,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -746,7 +750,7 @@ func (q *Queries) ListDeliveryFailuresByProject(ctx context.Context, arg ListDel
 }
 
 const listDueServices = `-- name: ListDueServices :many
-SELECT id, project_id, name, slug, type, url, hostname, port, interval_seconds, timeout_seconds, failure_threshold, enabled, next_run_at, channel_id, template_down, template_recovered, created_at, updated_at FROM services
+SELECT id, project_id, name, slug, type, url, hostname, port, interval_seconds, timeout_seconds, failure_threshold, enabled, next_run_at, channel_id, template_down, template_recovered, tags, created_at, updated_at FROM services
 WHERE enabled = 1 AND (next_run_at IS NULL OR next_run_at <= ?1)
 ORDER BY COALESCE(next_run_at, '') ASC
 LIMIT ?2
@@ -783,6 +787,7 @@ func (q *Queries) ListDueServices(ctx context.Context, arg ListDueServicesParams
 			&i.ChannelID,
 			&i.TemplateDown,
 			&i.TemplateRecovered,
+			&i.Tags,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 		); err != nil {
@@ -869,7 +874,7 @@ func (q *Queries) ListServiceStatesByProject(ctx context.Context, projectID stri
 }
 
 const listServices = `-- name: ListServices :many
-SELECT id, project_id, name, slug, type, url, hostname, port, interval_seconds, timeout_seconds, failure_threshold, enabled, next_run_at, channel_id, template_down, template_recovered, created_at, updated_at FROM services WHERE project_id = ?1 ORDER BY name
+SELECT id, project_id, name, slug, type, url, hostname, port, interval_seconds, timeout_seconds, failure_threshold, enabled, next_run_at, channel_id, template_down, template_recovered, tags, created_at, updated_at FROM services WHERE project_id = ?1 ORDER BY name
 `
 
 func (q *Queries) ListServices(ctx context.Context, projectID string) ([]Service, error) {
@@ -898,6 +903,7 @@ func (q *Queries) ListServices(ctx context.Context, projectID string) ([]Service
 			&i.ChannelID,
 			&i.TemplateDown,
 			&i.TemplateRecovered,
+			&i.Tags,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 		); err != nil {
@@ -1099,8 +1105,9 @@ UPDATE services SET
     failure_threshold = ?7,
     template_down = ?8,
     template_recovered = ?9,
-    updated_at = ?10
-WHERE id = ?11
+    tags = ?10,
+    updated_at = ?11
+WHERE id = ?12
 `
 
 type UpdateServiceParams struct {
@@ -1113,6 +1120,7 @@ type UpdateServiceParams struct {
 	FailureThreshold  int64
 	TemplateDown      string
 	TemplateRecovered string
+	Tags              string
 	UpdatedAt         string
 	ID                string
 }
@@ -1128,6 +1136,7 @@ func (q *Queries) UpdateService(ctx context.Context, arg UpdateServiceParams) er
 		arg.FailureThreshold,
 		arg.TemplateDown,
 		arg.TemplateRecovered,
+		arg.Tags,
 		arg.UpdatedAt,
 		arg.ID,
 	)

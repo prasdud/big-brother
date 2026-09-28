@@ -103,14 +103,14 @@ WHERE project_id = sqlc.arg(project_id) AND slug = sqlc.arg(slug);
 INSERT INTO services (
     id, project_id, name, slug, type, url, hostname, port,
     interval_seconds, timeout_seconds, failure_threshold, enabled,
-    template_down, template_recovered,
+    template_down, template_recovered, tags,
     created_at, updated_at
 ) VALUES (
     sqlc.arg(id), sqlc.arg(project_id), sqlc.arg(name), sqlc.arg(slug),
     sqlc.arg(type), sqlc.arg(url), sqlc.arg(hostname), sqlc.arg(port),
     sqlc.arg(interval_seconds), sqlc.arg(timeout_seconds),
     sqlc.arg(failure_threshold), sqlc.arg(enabled),
-    sqlc.arg(template_down), sqlc.arg(template_recovered),
+    sqlc.arg(template_down), sqlc.arg(template_recovered), sqlc.arg(tags),
     sqlc.arg(created_at), sqlc.arg(updated_at)
 );
 
@@ -125,6 +125,7 @@ UPDATE services SET
     failure_threshold = sqlc.arg(failure_threshold),
     template_down = sqlc.arg(template_down),
     template_recovered = sqlc.arg(template_recovered),
+    tags = sqlc.arg(tags),
     updated_at = sqlc.arg(updated_at)
 WHERE id = sqlc.arg(id);
 

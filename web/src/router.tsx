@@ -2,9 +2,8 @@ import { createRootRoute, createRoute, createRouter } from "@tanstack/react-rout
 import { AppShell } from "./components/AppShell";
 import { Login } from "./features/auth/Login";
 import { Services } from "./features/services/Services";
-import { Projects } from "./features/projects/Projects";
 import { ServiceForm } from "./features/services/ServiceForm";
-import { ServiceDetail } from "./features/services/ServiceDetail";
+import { Projects } from "./features/projects/Projects";
 import { ProjectSettings } from "./features/projects/ProjectSettings";
 import { AlertSettings } from "./features/alerts/AlertSettings";
 import { Integrations } from "./features/integrations/Integrations";
@@ -49,12 +48,6 @@ const serviceEditRoute = createRoute({
   component: ServiceForm,
 });
 
-const serviceDetailRoute = createRoute({
-  getParentRoute: () => appRoute,
-  path: "/services/$service",
-  component: ServiceDetail,
-});
-
 const settingsRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/settings",
@@ -92,7 +85,6 @@ const routeTree = rootRoute.addChildren([
     servicesRoute,
     serviceNewRoute,
     serviceEditRoute,
-    serviceDetailRoute,
     settingsRoute,
     alertsRoute,
     deliveriesRoute,

@@ -64,6 +64,7 @@ func (s *Server) createService(w http.ResponseWriter, r *http.Request) {
 		Enabled:           1,
 		TemplateDown:      req.TemplateDown,
 		TemplateRecovered: req.TemplateRecovered,
+		Tags:              joinTags(req.Tags),
 		CreatedAt:         now,
 		UpdatedAt:         now,
 	}
@@ -87,6 +88,7 @@ func (s *Server) createService(w http.ResponseWriter, r *http.Request) {
 		Enabled:           svc.Enabled,
 		TemplateDown:      svc.TemplateDown,
 		TemplateRecovered: svc.TemplateRecovered,
+		Tags:              svc.Tags,
 		CreatedAt:         svc.CreatedAt,
 		UpdatedAt:         svc.UpdatedAt,
 	}); err != nil {
@@ -129,6 +131,7 @@ func (s *Server) updateService(w http.ResponseWriter, r *http.Request) {
 	svc.FailureThreshold = req.FailureThreshold
 	svc.TemplateDown = req.TemplateDown
 	svc.TemplateRecovered = req.TemplateRecovered
+	svc.Tags = joinTags(req.Tags)
 	svc.UpdatedAt = store.NowUTC()
 
 	if err := s.q.UpdateService(r.Context(), store.UpdateServiceParams{
@@ -141,6 +144,7 @@ func (s *Server) updateService(w http.ResponseWriter, r *http.Request) {
 		FailureThreshold:  svc.FailureThreshold,
 		TemplateDown:      svc.TemplateDown,
 		TemplateRecovered: svc.TemplateRecovered,
+		Tags:              svc.Tags,
 		UpdatedAt:         svc.UpdatedAt,
 		ID:                svc.ID,
 	}); err != nil {
@@ -161,6 +165,61 @@ func (s *Server) deleteService(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *Server) cloneService(w http.ResponseWriter, r *http.Request) {
+	p, svc, err := s.serviceFromPath(r)
+	if err != nil {
+		notFound(w)
+		return
+	}
+	now := store.NowUTC()
+	clone := store.Service{
+		ID:                uuid.NewString(),
+		ProjectID:         p.ID,
+		Name:              svc.Name + " copy",
+		Type:              svc.Type,
+		Url:               svc.Url,
+		Hostname:          svc.Hostname,
+		Port:              svc.Port,
+		IntervalSeconds:   svc.IntervalSeconds,
+		TimeoutSeconds:    svc.TimeoutSeconds,
+		FailureThreshold:  svc.FailureThreshold,
+		Enabled:           0, // start paused so a clone does not alert immediately
+		TemplateDown:      svc.TemplateDown,
+		TemplateRecovered: svc.TemplateRecovered,
+		Tags:              svc.Tags,
+		CreatedAt:         now,
+		UpdatedAt:         now,
+	}
+	clone.Slug, err = s.uniqueServiceSlug(r, p.ID, slug.Make(clone.Name))
+	if err != nil {
+		serverError(w, err)
+		return
+	}
+	if err := s.q.CreateService(r.Context(), store.CreateServiceParams{
+		ID:                clone.ID,
+		ProjectID:         clone.ProjectID,
+		Name:              clone.Name,
+		Slug:              clone.Slug,
+		Type:              clone.Type,
+		Url:               clone.Url,
+		Hostname:          clone.Hostname,
+		Port:              clone.Port,
+		IntervalSeconds:   clone.IntervalSeconds,
+		TimeoutSeconds:    clone.TimeoutSeconds,
+		FailureThreshold:  clone.FailureThreshold,
+		Enabled:           clone.Enabled,
+		TemplateDown:      clone.TemplateDown,
+		TemplateRecovered: clone.TemplateRecovered,
+		Tags:              clone.Tags,
+		CreatedAt:         clone.CreatedAt,
+		UpdatedAt:         clone.UpdatedAt,
+	}); err != nil {
+		serverError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, newServiceView(clone))
 }
 
 func (s *Server) setServiceEnabled(enabled bool) http.HandlerFunc {

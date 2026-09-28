@@ -163,6 +163,28 @@
         "responses": { "200": { "description": "Uptime", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Uptime" } } } } }
       }
     },
+    "/api/v1/projects/{project}/monitors": {
+      "parameters": [{ "$ref": "#/components/parameters/Project" }],
+      "get": {
+        "tags": ["monitoring"],
+        "summary": "Monitor summaries for a project",
+        "responses": {
+          "200": { "description": "Monitors", "content": { "application/json": { "schema": { "type": "array", "items": { "$ref": "#/components/schemas/Monitor" } } } } },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      }
+    },
+    "/api/v1/projects/{project}/services/{service}/clone": {
+      "parameters": [{ "$ref": "#/components/parameters/Project" }, { "$ref": "#/components/parameters/Service" }],
+      "post": {
+        "tags": ["services"],
+        "summary": "Clone a service (member)",
+        "responses": {
+          "201": { "description": "Cloned", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Service" } } } },
+          "403": { "$ref": "#/components/responses/Forbidden" }
+        }
+      }
+    },
     "/api/v1/slack": {
       "get": {
         "tags": ["slack"],
@@ -371,6 +393,7 @@
           "channel_id": { "type": "string" },
           "template_down": { "type": "string" },
           "template_recovered": { "type": "string" },
+          "tags": { "type": "array", "items": { "type": "string" } },
           "created_at": { "type": "string", "format": "date-time" },
           "updated_at": { "type": "string", "format": "date-time" }
         }
@@ -388,7 +411,37 @@
           "timeout_seconds": { "type": "integer" },
           "failure_threshold": { "type": "integer" },
           "template_down": { "type": "string" },
-          "template_recovered": { "type": "string" }
+          "template_recovered": { "type": "string" },
+          "tags": { "type": "array", "items": { "type": "string" } }
+        }
+      },
+      "Monitor": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "name": { "type": "string" },
+          "slug": { "type": "string" },
+          "type": { "type": "string", "enum": ["http", "tcp", "dns"] },
+          "url": { "type": "string" },
+          "hostname": { "type": "string" },
+          "port": { "type": "integer" },
+          "enabled": { "type": "boolean" },
+          "tags": { "type": "array", "items": { "type": "string" } },
+          "interval_seconds": { "type": "integer" },
+          "state": { "type": "string", "enum": ["up", "down", "pending", "paused"] },
+          "uptime_24h": { "type": "number" },
+          "uptime_30d": { "type": "number" },
+          "heartbeats": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "status": { "type": "string" },
+                "latency_ms": { "type": "integer" },
+                "checked_at": { "type": "string", "format": "date-time" }
+              }
+            }
+          }
         }
       },
       "Status": {

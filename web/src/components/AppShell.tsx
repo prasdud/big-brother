@@ -1,6 +1,5 @@
 import { useEffect } from "react";
 import { Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
-import { Plus } from "lucide-react";
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { Separator } from "@/components/ui/separator";
 import {
@@ -11,7 +10,6 @@ import {
   BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Button } from "@/components/ui/button";
 import { AppSidebar } from "@/components/app-sidebar";
 import { ProjectSidebar } from "@/components/project-sidebar";
 import { isProjectRoute } from "@/components/nav-items";
@@ -30,7 +28,7 @@ const titles: Record<string, string> = {
 };
 
 export function AppShell() {
-  const { state, canWrite } = useSession();
+  const { state } = useSession();
   const { project } = useProjects();
   const navigate = useNavigate();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
@@ -51,7 +49,6 @@ export function AppShell() {
 
   const projectMode = isProjectRoute(pathname);
   const page = pathname.startsWith("/services/") ? "Service" : (titles[pathname] ?? "Services");
-  const showNew = canWrite && Boolean(project) && pathname !== "/" && pathname !== "/services/new";
   const showProjectCrumb = Boolean(project) && pathname !== "/";
 
   return (
@@ -76,12 +73,6 @@ export function AppShell() {
               </BreadcrumbItem>
             </BreadcrumbList>
           </Breadcrumb>
-          {showNew ? (
-            <Button className="ml-auto" size="sm" onClick={() => void navigate({ to: "/services/new" })}>
-              <Plus />
-              New service
-            </Button>
-          ) : null}
         </header>
         <div className="flex flex-1 flex-col gap-4 overflow-auto p-4 md:p-6">
           <Outlet />

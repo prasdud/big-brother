@@ -53,6 +53,7 @@ CREATE TABLE services (
     channel_id        TEXT NOT NULL DEFAULT '',
     template_down     TEXT NOT NULL DEFAULT '',
     template_recovered TEXT NOT NULL DEFAULT '',
+    tags              TEXT NOT NULL DEFAULT '',
     created_at        TEXT NOT NULL,
     updated_at        TEXT NOT NULL,
     UNIQUE (project_id, slug)

@@ -544,6 +544,90 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/projects/{project}/monitors": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project: components["parameters"]["Project"];
+            };
+            cookie?: never;
+        };
+        /** Monitor summaries for a project */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    project: components["parameters"]["Project"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Monitors */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Monitor"][];
+                    };
+                };
+                404: components["responses"]["NotFound"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/projects/{project}/services/{service}/clone": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project: components["parameters"]["Project"];
+                service: components["parameters"]["Service"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Clone a service (member) */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    project: components["parameters"]["Project"];
+                    service: components["parameters"]["Service"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Cloned */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Service"];
+                    };
+                };
+                403: components["responses"]["Forbidden"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/slack": {
         parameters: {
             query?: never;
@@ -1368,6 +1452,7 @@ export interface components {
             channel_id?: string;
             template_down?: string;
             template_recovered?: string;
+            tags?: string[];
             /** Format: date-time */
             created_at?: string;
             /** Format: date-time */
@@ -1385,6 +1470,30 @@ export interface components {
             failure_threshold?: number;
             template_down?: string;
             template_recovered?: string;
+            tags?: string[];
+        };
+        Monitor: {
+            id?: string;
+            name?: string;
+            slug?: string;
+            /** @enum {string} */
+            type?: "http" | "tcp" | "dns";
+            url?: string;
+            hostname?: string;
+            port?: number;
+            enabled?: boolean;
+            tags?: string[];
+            interval_seconds?: number;
+            /** @enum {string} */
+            state?: "up" | "down" | "pending" | "paused";
+            uptime_24h?: number;
+            uptime_30d?: number;
+            heartbeats?: {
+                status?: string;
+                latency_ms?: number;
+                /** Format: date-time */
+                checked_at?: string;
+            }[];
         };
         Status: {
             /** @enum {string} */

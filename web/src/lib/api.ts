@@ -4,6 +4,7 @@ import type {
   ChannelView,
   Check,
   Delivery,
+  Monitor,
   Project,
   Service,
   ServiceInput,
@@ -77,6 +78,10 @@ export const servicesApi = {
     request<Service>("POST", `/api/v1/projects/${project}/services/${service}/pause`),
   resume: (project: string, service: string) =>
     request<Service>("POST", `/api/v1/projects/${project}/services/${service}/resume`),
+  clone: (project: string, service: string) =>
+    request<Service>("POST", `/api/v1/projects/${project}/services/${service}/clone`),
+  monitors: (project: string) =>
+    request<Monitor[]>("GET", `/api/v1/projects/${project}/monitors`),
   status: (project: string, service: string) =>
     request<Status>("GET", `/api/v1/projects/${project}/services/${service}/status`),
   checks: (project: string, service: string, limit = 50) =>

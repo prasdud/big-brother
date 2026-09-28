@@ -39,6 +39,7 @@ const defaults: ServiceInput = {
   failure_threshold: 3,
   template_down: "",
   template_recovered: "",
+  tags: [],
 };
 
 function toInput(service: Service): ServiceInput {
@@ -53,7 +54,15 @@ function toInput(service: Service): ServiceInput {
     failure_threshold: service.failure_threshold,
     template_down: service.template_down,
     template_recovered: service.template_recovered,
+    tags: service.tags ?? [],
   };
+}
+
+function parseTags(input: string): string[] {
+  return input
+    .split(",")
+    .map((tag) => tag.trim())
+    .filter(Boolean);
 }
 
 function validate(form: ServiceInput): string {
@@ -77,6 +86,7 @@ export function ServiceForm() {
   const slug = project?.slug ?? "";
 
   const [form, setForm] = useState<ServiceInput>(defaults);
+  const [tagsInput, setTagsInput] = useState("");
   const [error, setError] = useState("");
 
   const existing = useQuery({
@@ -86,16 +96,24 @@ export function ServiceForm() {
   });
 
   useEffect(() => {
-    if (existing.data) setForm(toInput(existing.data));
+    if (existing.data) {
+      setForm(toInput(existing.data));
+      setTagsInput((existing.data.tags ?? []).join(", "));
+    }
   }, [existing.data]);
 
   const save = useMutation({
-    mutationFn: () =>
-      editing ? servicesApi.update(slug, params.service as string, form) : servicesApi.create(slug, form),
-    onSuccess: (service) => {
+    mutationFn: () => {
+      const input = { ...form, tags: parseTags(tagsInput) };
+      return editing
+        ? servicesApi.update(slug, params.service as string, input)
+        : servicesApi.create(slug, input);
+    },
+    onSuccess: () => {
       toast.success(editing ? "Service updated" : "Service created");
       void queryClient.invalidateQueries({ queryKey: ["services", slug] });
-      void navigate({ to: "/services/$service", params: { service: service.slug } });
+      void queryClient.invalidateQueries({ queryKey: ["monitors", slug] });
+      void navigate({ to: "/services" });
     },
     onError: (err) => setError(errorMessage(err)),
   });
@@ -239,6 +257,17 @@ export function ServiceForm() {
                 onChange={(e) => set("template_recovered", e.target.value)}
               />
             </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="tags">Tags</Label>
+            <Input
+              id="tags"
+              value={tagsInput}
+              onChange={(e) => setTagsInput(e.target.value)}
+              placeholder="pay, api"
+            />
+            <p className="text-label text-muted-foreground">Comma-separated.</p>
           </div>
 
           {error ? <p className="text-sm text-destructive">{error}</p> : null}

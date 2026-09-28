@@ -1,101 +1,122 @@
-import { useState } from "react";
-import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Link, useNavigate } from "@tanstack/react-router";
-import { MoreHorizontal } from "lucide-react";
+import { useMemo, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useNavigate } from "@tanstack/react-router";
+import { Copy, Pause, Pencil, Play, Plus, Search, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import { servicesApi } from "@/lib/api";
-import { errorMessage, serviceTarget } from "@/lib/format";
+import { errorMessage, formatRelative } from "@/lib/format";
 import { useProjects } from "@/lib/project";
 import { useSession } from "@/lib/session";
-import { StatusBadge } from "@/components/status-badge";
 import { ConfirmDialog } from "@/components/confirm-dialog";
+import { HeartbeatBars, ResponseGraph, Timeline } from "@/features/services/monitor-widgets";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import type { Service } from "@/lib/types";
+import { cn } from "@/lib/utils";
+import type { Monitor, State } from "@/lib/types";
 
-function Stat({ label, value }: { label: string; value: number | string }) {
-  return (
-    <Card className="py-4">
-      <CardContent className="space-y-1">
-        <p className="text-label uppercase text-muted-foreground">{label}</p>
-        <p className="text-h1 tabular-nums">{value}</p>
-      </CardContent>
-    </Card>
-  );
+const STATE_LABEL: Record<State, string> = {
+  up: "Up",
+  down: "Down",
+  pending: "Pending",
+  paused: "Paused",
+};
+
+function uptimePillClass(monitor: Monitor): string {
+  if (!monitor.enabled) return "bg-muted text-muted-foreground";
+  if (monitor.state === "down") return "bg-destructive/15 text-destructive";
+  if (monitor.state === "pending") return "bg-muted text-muted-foreground";
+  return "bg-primary/15 text-primary";
+}
+
+function statePillClass(state: State): string {
+  if (state === "up") return "bg-primary/15 text-primary";
+  if (state === "down") return "bg-destructive/15 text-destructive";
+  return "bg-muted text-muted-foreground";
 }
 
 export function Services() {
-  const { project, loading } = useProjects();
+  const { project } = useProjects();
   const { canWrite } = useSession();
-  const queryClient = useQueryClient();
   const navigate = useNavigate();
-  const [pendingDelete, setPendingDelete] = useState<Service | null>(null);
-
+  const queryClient = useQueryClient();
   const slug = project?.slug ?? "";
-  const services = useQuery({
-    queryKey: ["services", slug],
-    queryFn: () => servicesApi.list(slug),
+
+  const [selected, setSelected] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
+  const [typeFilter, setTypeFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [activeFilter, setActiveFilter] = useState("all");
+  const [tagFilter, setTagFilter] = useState("all");
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+
+  const monitors = useQuery({
+    queryKey: ["monitors", slug],
+    queryFn: () => servicesApi.monitors(slug),
     enabled: Boolean(slug),
+    refetchInterval: 10000,
   });
 
-  const statuses = useQueries({
-    queries: (services.data ?? []).map((service) => ({
-      queryKey: ["status", slug, service.slug],
-      queryFn: () => servicesApi.status(slug, service.slug),
-      refetchInterval: 5000,
-    })),
+  const list = monitors.data ?? [];
+  const tags = useMemo(() => [...new Set(list.flatMap((m) => m.tags))].sort(), [list]);
+
+  const filtered = list.filter((monitor) => {
+    if (search && !monitor.name.toLowerCase().includes(search.toLowerCase())) return false;
+    if (typeFilter !== "all" && monitor.type !== typeFilter) return false;
+    if (statusFilter !== "all" && monitor.state !== statusFilter) return false;
+    if (activeFilter === "active" && !monitor.enabled) return false;
+    if (activeFilter === "paused" && monitor.enabled) return false;
+    if (tagFilter !== "all" && !monitor.tags.includes(tagFilter)) return false;
+    return true;
   });
+
+  const current = filtered.find((monitor) => monitor.slug === selected) ?? filtered[0] ?? null;
+
+  const invalidate = () => {
+    void queryClient.invalidateQueries({ queryKey: ["monitors", slug] });
+    void queryClient.invalidateQueries({ queryKey: ["services", slug] });
+  };
 
   const toggle = useMutation({
-    mutationFn: ({ name, enabled }: { name: string; enabled: boolean }) =>
-      enabled ? servicesApi.pause(slug, name) : servicesApi.resume(slug, name),
+    mutationFn: (monitor: Monitor) =>
+      monitor.enabled ? servicesApi.pause(slug, monitor.slug) : servicesApi.resume(slug, monitor.slug),
     onSuccess: () => {
-      toast.success("Service updated");
-      void queryClient.invalidateQueries({ queryKey: ["services", slug] });
+      toast.success("Monitor updated");
+      invalidate();
+    },
+    onError: (error) => toast.error(errorMessage(error)),
+  });
+
+  const clone = useMutation({
+    mutationFn: (monitor: Monitor) => servicesApi.clone(slug, monitor.slug),
+    onSuccess: (service) => {
+      toast.success("Monitor cloned (paused)");
+      setSelected(service.slug);
+      invalidate();
     },
     onError: (error) => toast.error(errorMessage(error)),
   });
 
   const remove = useMutation({
-    mutationFn: (name: string) => servicesApi.remove(slug, name),
+    mutationFn: (monitor: Monitor) => servicesApi.remove(slug, monitor.slug),
     onSuccess: () => {
-      toast.success("Service deleted");
-      setPendingDelete(null);
-      void queryClient.invalidateQueries({ queryKey: ["services", slug] });
+      toast.success("Monitor deleted");
+      setConfirmingDelete(false);
+      setSelected(null);
+      invalidate();
     },
     onError: (error) => toast.error(errorMessage(error)),
   });
 
-  if (loading) {
-    return (
-      <div className="space-y-3">
-        <Skeleton className="h-24 w-full" />
-        <Skeleton className="h-56 w-full" />
-      </div>
-    );
-  }
   if (!project) {
     return (
       <Card>
@@ -109,130 +130,276 @@ export function Services() {
     );
   }
 
-  const rows = services.data ?? [];
-  const counts = { up: 0, down: 0, pending: 0, paused: 0 };
-  rows.forEach((service, index) => {
-    if (!service.enabled) {
-      counts.paused += 1;
-      return;
-    }
-    const state = statuses[index]?.data?.state;
-    if (state && state in counts) counts[state as keyof typeof counts] += 1;
-  });
+  const clearFilters = () => {
+    setSearch("");
+    setTypeFilter("all");
+    setStatusFilter("all");
+    setActiveFilter("all");
+    setTagFilter("all");
+  };
 
   return (
-    <div className="space-y-4">
-      <div>
-        <h1 className="text-h1">{project.name}</h1>
-        <p className="text-sm text-muted-foreground">Current status across your services.</p>
+    <div className="space-y-5">
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        {canWrite ? (
+          <Button className="h-11 rounded-2xl px-5" onClick={() => void navigate({ to: "/services/new" })}>
+            <Plus />
+            Add New Monitor
+          </Button>
+        ) : (
+          <span />
+        )}
+        <h1 className="text-display text-muted-foreground">{project.name}</h1>
       </div>
 
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-        <Stat label="Up" value={counts.up} />
-        <Stat label="Down" value={counts.down} />
-        <Stat label="Pending" value={counts.pending} />
-        <Stat label="Paused" value={counts.paused} />
-      </div>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Services</CardTitle>
-          <CardDescription>{rows.length} total</CardDescription>
-        </CardHeader>
-        <CardContent className="px-0">
-          {services.isLoading ? (
-            <div className="space-y-2 px-6">
-              <Skeleton className="h-10 w-full" />
-              <Skeleton className="h-10 w-full" />
+      <div className="grid gap-4 lg:grid-cols-[minmax(320px,32%)_1fr]">
+        {/* Monitor list */}
+        <Card className="flex max-h-[calc(100svh-11rem)] flex-col overflow-hidden">
+          <CardContent className="flex min-h-0 flex-1 flex-col gap-3 p-4">
+            <div className="flex gap-2">
+              <Select value={typeFilter} onValueChange={setTypeFilter}>
+                <SelectTrigger className="w-28">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All</SelectItem>
+                  <SelectItem value="http">HTTP</SelectItem>
+                  <SelectItem value="tcp">TCP</SelectItem>
+                  <SelectItem value="dns">DNS</SelectItem>
+                </SelectContent>
+              </Select>
+              <div className="relative flex-1">
+                <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  value={search}
+                  onChange={(event) => setSearch(event.target.value)}
+                  placeholder="Search..."
+                  className="pl-9"
+                />
+              </div>
             </div>
-          ) : rows.length === 0 ? (
-            <p className="px-6 pb-2 text-sm text-muted-foreground">No services yet.</p>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Service</TableHead>
-                  <TableHead>Target</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {rows.map((service, index) => (
-                  <TableRow key={service.id}>
-                    <TableCell>
-                      <Link
-                        className="font-medium hover:underline"
-                        to="/services/$service"
-                        params={{ service: service.slug }}
-                      >
-                        {service.name}
-                      </Link>
-                      <Badge variant="outline" className="ml-2 uppercase text-muted-foreground">
-                        {service.type}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="max-w-xs truncate text-muted-foreground">
-                      {serviceTarget(service)}
-                    </TableCell>
-                    <TableCell>
-                      <StatusBadge state={service.enabled ? statuses[index]?.data?.state : "paused"} />
-                    </TableCell>
-                    <TableCell className="text-right">
-                      {canWrite ? (
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="icon-sm" aria-label="Actions">
-                              <MoreHorizontal />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuItem
-                              onClick={() => toggle.mutate({ name: service.slug, enabled: service.enabled })}
-                            >
-                              {service.enabled ? "Pause" : "Resume"}
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              onClick={() =>
-                                void navigate({
-                                  to: "/services/$service/edit",
-                                  params: { service: service.slug },
-                                })
-                              }
-                            >
-                              Edit
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              variant="destructive"
-                              onClick={() => setPendingDelete(service)}
-                            >
-                              Delete
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      ) : (
-                        <span className="text-xs text-muted-foreground">—</span>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <Button variant="outline" size="icon-sm" onClick={clearFilters} aria-label="Clear filters">
+                <X />
+              </Button>
+              <Select value={statusFilter} onValueChange={setStatusFilter}>
+                <SelectTrigger className="h-7 w-auto gap-1 rounded-full px-3 text-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Status</SelectItem>
+                  <SelectItem value="up">Up</SelectItem>
+                  <SelectItem value="down">Down</SelectItem>
+                  <SelectItem value="pending">Pending</SelectItem>
+                  <SelectItem value="paused">Paused</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select value={activeFilter} onValueChange={setActiveFilter}>
+                <SelectTrigger className="h-7 w-auto gap-1 rounded-full px-3 text-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Active</SelectItem>
+                  <SelectItem value="active">Enabled</SelectItem>
+                  <SelectItem value="paused">Paused</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select value={tagFilter} onValueChange={setTagFilter}>
+                <SelectTrigger className="h-7 w-auto gap-1 rounded-full px-3 text-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Tags</SelectItem>
+                  {tags.map((tag) => (
+                    <SelectItem key={tag} value={tag}>
+                      {tag}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="-mr-1 min-h-0 flex-1 space-y-1 overflow-y-auto pr-1">
+              {monitors.isLoading ? (
+                <div className="space-y-2">
+                  <Skeleton className="h-14 w-full" />
+                  <Skeleton className="h-14 w-full" />
+                  <Skeleton className="h-14 w-full" />
+                </div>
+              ) : filtered.length === 0 ? (
+                <p className="py-6 text-center text-sm text-muted-foreground">No monitors.</p>
+              ) : (
+                filtered.map((monitor) => (
+                  <button
+                    key={monitor.id}
+                    type="button"
+                    onClick={() => setSelected(monitor.slug)}
+                    className={cn(
+                      "flex w-full items-center gap-2 rounded-xl px-2.5 py-2 text-left transition-colors",
+                      current?.slug === monitor.slug ? "bg-secondary" : "hover:bg-secondary/60",
+                    )}
+                  >
+                    <span
+                      className={cn(
+                        "rounded-full px-2 py-0.5 text-xs font-medium tabular-nums",
+                        uptimePillClass(monitor),
                       )}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-      </Card>
+                    >
+                      {monitor.uptime_24h.toFixed(monitor.uptime_24h === 100 ? 0 : 2)}%
+                    </span>
+                    <span className="text-muted-foreground">›</span>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm">{monitor.name}</p>
+                      {monitor.tags.length > 0 ? (
+                        <div className="mt-0.5 flex flex-wrap gap-1">
+                          {monitor.tags.map((tag) => (
+                            <Badge
+                              key={tag}
+                              className="border-transparent bg-info/15 text-[10px] text-info"
+                            >
+                              {tag}
+                            </Badge>
+                          ))}
+                        </div>
+                      ) : null}
+                    </div>
+                    <HeartbeatBars beats={monitor.heartbeats} />
+                  </button>
+                ))
+              )}
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Monitor detail */}
+        {current ? (
+          <div className="space-y-4">
+            <div className="flex flex-wrap gap-2">
+              {canWrite ? (
+                <>
+                  <Button
+                    variant="secondary"
+                    className="rounded-full"
+                    onClick={() => toggle.mutate(current)}
+                  >
+                    {current.enabled ? <Pause /> : <Play />}
+                    {current.enabled ? "Pause" : "Resume"}
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    className="rounded-full"
+                    onClick={() =>
+                      void navigate({
+                        to: "/services/$service/edit",
+                        params: { service: current.slug },
+                      })
+                    }
+                  >
+                    <Pencil />
+                    Edit
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    className="rounded-full"
+                    onClick={() => clone.mutate(current)}
+                  >
+                    <Copy />
+                    Clone
+                  </Button>
+                  <Button
+                    variant="destructive"
+                    className="rounded-full"
+                    onClick={() => setConfirmingDelete(true)}
+                  >
+                    <Trash2 />
+                    Delete
+                  </Button>
+                </>
+              ) : null}
+            </div>
+
+            <Card>
+              <CardContent className="space-y-4 p-6">
+                <div className="flex items-start gap-4">
+                  <div className="min-w-0 flex-1">
+                    <Timeline beats={current.heartbeats} />
+                    <div className="mt-2 flex justify-between text-xs text-muted-foreground">
+                      <span>
+                        {current.heartbeats.length
+                          ? formatRelative(current.heartbeats[0].checked_at)
+                          : "—"}
+                      </span>
+                      <span>now</span>
+                    </div>
+                  </div>
+                  <div
+                    className={cn(
+                      "shrink-0 rounded-2xl px-6 py-3 text-lg font-semibold",
+                      statePillClass(current.state),
+                    )}
+                  >
+                    {STATE_LABEL[current.state]}
+                  </div>
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  Check every <span className="text-foreground">{current.interval_seconds}</span> seconds
+                </p>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardContent className="grid grid-cols-2 divide-x divide-border py-8">
+                <div className="px-6 text-center">
+                  <p className="text-sm text-muted-foreground">Uptime</p>
+                  <p className="text-xs text-muted-foreground">(24-hour)</p>
+                  <p className="mt-3 text-display tabular-nums text-primary">{current.uptime_24h}%</p>
+                </div>
+                <div className="px-6 text-center">
+                  <p className="text-sm text-muted-foreground">Uptime</p>
+                  <p className="text-xs text-muted-foreground">(30-day)</p>
+                  <p className="mt-3 text-display tabular-nums text-primary">{current.uptime_30d}%</p>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-sm text-muted-foreground">Response Time (ms)</CardTitle>
+                <div className="ml-auto">
+                  <Select value="recent" onValueChange={() => {}}>
+                    <SelectTrigger className="h-8 w-28">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="recent">Recent</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <ResponseGraph beats={current.heartbeats} />
+              </CardContent>
+            </Card>
+          </div>
+        ) : (
+          <Card>
+            <CardContent className="py-16 text-center text-sm text-muted-foreground">
+              {monitors.isLoading ? "Loading…" : "Add a monitor to get started."}
+            </CardContent>
+          </Card>
+        )}
+      </div>
 
       <ConfirmDialog
-        open={pendingDelete !== null}
-        onOpenChange={(open) => {
-          if (!open) setPendingDelete(null);
-        }}
-        title={`Delete ${pendingDelete?.name ?? "service"}?`}
-        description="This removes the service and its check history."
+        open={confirmingDelete}
+        onOpenChange={setConfirmingDelete}
+        title={`Delete ${current?.name ?? "monitor"}?`}
+        description="This removes the monitor and its check history."
         confirmLabel="Delete"
         pending={remove.isPending}
         onConfirm={() => {
-          if (pendingDelete) remove.mutate(pendingDelete.slug);
+          if (current) remove.mutate(current);
         }}
       />
     </div>

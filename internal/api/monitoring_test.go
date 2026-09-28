@@ -104,6 +104,62 @@ func TestMonitoringEndpoints(t *testing.T) {
 	})
 }
 
+func TestMonitorsSummaryAndClone(t *testing.T) {
+	sqldb, err := db.Open(filepath.Join(t.TempDir(), "test.db"))
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	t.Cleanup(func() { sqldb.Close() })
+	if err := db.Migrate(sqldb); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+	q := store.New(sqldb)
+	ws, _ := store.EnsureWorkspace(context.Background(), q, "Test")
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	h := New(q, sqldb, ws, metrics.New(), web.Handler(), nil, nil, logger).Router()
+
+	do(t, h, http.MethodPost, "/api/v1/projects", `{"name":"P"}`)
+	rec := do(t, h, http.MethodPost, "/api/v1/projects/p/services",
+		`{"name":"S","type":"http","url":"http://example.test","tags":["pay"]}`)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create service = %d", rec.Code)
+	}
+	svc, err := q.GetServiceBySlug(context.Background(), store.GetServiceBySlugParams{
+		ProjectID: mustProjectID(t, q), Slug: "s",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	mon := monitor.New(q, nil)
+	if err := mon.Record(context.Background(), svc, check.Result{Up: true, StatusCode: 200, LatencyMS: 5}); err != nil {
+		t.Fatal(err)
+	}
+
+	rec = do(t, h, http.MethodGet, "/api/v1/projects/p/monitors", "")
+	var monitors []monitorSummary
+	if err := json.Unmarshal(rec.Body.Bytes(), &monitors); err != nil {
+		t.Fatal(err)
+	}
+	if len(monitors) != 1 {
+		t.Fatalf("monitors = %+v", monitors)
+	}
+	if monitors[0].State != "up" || len(monitors[0].Heartbeats) != 1 || len(monitors[0].Tags) != 1 {
+		t.Fatalf("monitor = %+v", monitors[0])
+	}
+
+	rec = do(t, h, http.MethodPost, "/api/v1/projects/p/services/s/clone", "")
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("clone = %d, body = %s", rec.Code, rec.Body.String())
+	}
+	var clone serviceView
+	if err := json.Unmarshal(rec.Body.Bytes(), &clone); err != nil {
+		t.Fatal(err)
+	}
+	if clone.Slug != "s-copy" || clone.Enabled || len(clone.Tags) != 1 {
+		t.Fatalf("clone = %+v", clone)
+	}
+}
+
 func mustProjectID(t *testing.T, q *store.Queries) string {
 	t.Helper()
 	p, err := q.GetProjectBySlug(context.Background(), "p")

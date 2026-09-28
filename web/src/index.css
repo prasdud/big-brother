@@ -6,14 +6,14 @@
 
 @theme inline {
     --font-heading: var(--font-sans);
-    --font-sans: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
-    --font-mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+    --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
 
-    --text-display: 3.5rem;
+    --text-display: 3rem;
     --text-display--line-height: 1.05;
     --text-display--letter-spacing: -0.02em;
     --text-display--font-weight: 600;
-    --text-h1: 2rem;
+    --text-h1: 1.75rem;
     --text-h1--line-height: 1.2;
     --text-h1--font-weight: 600;
     --text-label: 0.75rem;
@@ -27,6 +27,7 @@
     --color-sidebar-primary: var(--sidebar-primary);
     --color-sidebar-foreground: var(--sidebar-foreground);
     --color-sidebar: var(--sidebar);
+    --color-info: var(--info);
     --color-chart-5: var(--chart-5);
     --color-chart-4: var(--chart-4);
     --color-chart-3: var(--chart-3);
@@ -53,45 +54,47 @@
     --radius-sm: calc(var(--radius) * 0.6);
     --radius-md: calc(var(--radius) * 0.8);
     --radius-lg: var(--radius);
-    --radius-xl: calc(var(--radius) * 1.4);
+    --radius-xl: calc(var(--radius) * 1.2);
+    --radius-2xl: calc(var(--radius) * 1.4);
 }
 
-/* Terminal: phosphor green on deep black. Dark only. */
+/* Uptime-monitoring dark palette. Green = up, red = destructive, blue = tags. */
 :root,
 .dark {
-    --background: #0d1117;
+    --background: #080a0d;
     --foreground: #e6edf3;
-    --card: #161b22;
+    --card: #0d1218;
     --card-foreground: #e6edf3;
-    --popover: #161b22;
+    --popover: #0d1218;
     --popover-foreground: #e6edf3;
-    --primary: #3fb950;
-    --primary-foreground: #0d1117;
-    --secondary: #161b22;
+    --primary: #55de91;
+    --primary-foreground: #06140c;
+    --secondary: #101820;
     --secondary-foreground: #e6edf3;
-    --muted: #161b22;
+    --muted: #101820;
     --muted-foreground: #8b949e;
-    --accent: #161b22;
+    --accent: #101820;
     --accent-foreground: #e6edf3;
-    --destructive: #f85149;
-    --destructive-foreground: #0d1117;
-    --border: #30363d;
-    --input: #30363d;
-    --ring: #3fb950;
-    --chart-1: #3fb950;
-    --chart-2: #2ea043;
+    --destructive: #ef3348;
+    --destructive-foreground: #ffffff;
+    --info: #4c9aff;
+    --border: #1a222c;
+    --input: #1a222c;
+    --ring: #55de91;
+    --chart-1: #55de91;
+    --chart-2: #4c9aff;
     --chart-3: #8b949e;
-    --chart-4: #30363d;
+    --chart-4: #1a222c;
     --chart-5: #e6edf3;
-    --radius: 8px;
-    --sidebar: #0d1117;
+    --radius: 1.25rem;
+    --sidebar: #0a0e12;
     --sidebar-foreground: #e6edf3;
-    --sidebar-primary: #3fb950;
-    --sidebar-primary-foreground: #0d1117;
-    --sidebar-accent: #161b22;
+    --sidebar-primary: #55de91;
+    --sidebar-primary-foreground: #06140c;
+    --sidebar-accent: #101820;
     --sidebar-accent-foreground: #e6edf3;
-    --sidebar-border: #30363d;
-    --sidebar-ring: #3fb950;
+    --sidebar-border: #1a222c;
+    --sidebar-ring: #55de91;
 }
 
 @layer base {

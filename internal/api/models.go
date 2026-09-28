@@ -1,6 +1,32 @@
 package api
 
-import "github.com/prasdud/big-brother/internal/store"
+import (
+	"strings"
+
+	"github.com/prasdud/big-brother/internal/store"
+)
+
+// splitTags parses the stored comma-separated tag list.
+func splitTags(raw string) []string {
+	out := []string{}
+	for _, part := range strings.Split(raw, ",") {
+		if tag := strings.TrimSpace(part); tag != "" {
+			out = append(out, tag)
+		}
+	}
+	return out
+}
+
+// joinTags normalizes a tag list for storage.
+func joinTags(tags []string) string {
+	clean := make([]string, 0, len(tags))
+	for _, tag := range tags {
+		if trimmed := strings.TrimSpace(tag); trimmed != "" {
+			clean = append(clean, trimmed)
+		}
+	}
+	return strings.Join(clean, ",")
+}
 
 type projectView struct {
 	ID               string `json:"id"`
@@ -11,23 +37,24 @@ type projectView struct {
 }
 
 type serviceView struct {
-	ID                string `json:"id"`
-	ProjectID         string `json:"project_id"`
-	Name              string `json:"name"`
-	Slug              string `json:"slug"`
-	Type              string `json:"type"`
-	URL               string `json:"url"`
-	Hostname          string `json:"hostname"`
-	Port              int64  `json:"port"`
-	IntervalSeconds   int64  `json:"interval_seconds"`
-	TimeoutSeconds    int64  `json:"timeout_seconds"`
-	FailureThreshold  int64  `json:"failure_threshold"`
-	Enabled           bool   `json:"enabled"`
-	ChannelID         string `json:"channel_id"`
-	TemplateDown      string `json:"template_down"`
-	TemplateRecovered string `json:"template_recovered"`
-	CreatedAt         string `json:"created_at"`
-	UpdatedAt         string `json:"updated_at"`
+	ID                string   `json:"id"`
+	ProjectID         string   `json:"project_id"`
+	Name              string   `json:"name"`
+	Slug              string   `json:"slug"`
+	Type              string   `json:"type"`
+	URL               string   `json:"url"`
+	Hostname          string   `json:"hostname"`
+	Port              int64    `json:"port"`
+	IntervalSeconds   int64    `json:"interval_seconds"`
+	TimeoutSeconds    int64    `json:"timeout_seconds"`
+	FailureThreshold  int64    `json:"failure_threshold"`
+	Enabled           bool     `json:"enabled"`
+	ChannelID         string   `json:"channel_id"`
+	TemplateDown      string   `json:"template_down"`
+	TemplateRecovered string   `json:"template_recovered"`
+	Tags              []string `json:"tags"`
+	CreatedAt         string   `json:"created_at"`
+	UpdatedAt         string   `json:"updated_at"`
 }
 
 func newProjectView(p store.Project) projectView {
@@ -57,6 +84,7 @@ func newServiceView(s store.Service) serviceView {
 		ChannelID:         s.ChannelID,
 		TemplateDown:      s.TemplateDown,
 		TemplateRecovered: s.TemplateRecovered,
+		Tags:              splitTags(s.Tags),
 		CreatedAt:         s.CreatedAt,
 		UpdatedAt:         s.UpdatedAt,
 	}
@@ -68,14 +96,15 @@ type nameRequest struct {
 
 // serviceRequest is the create and update payload for a service.
 type serviceRequest struct {
-	Name              string `json:"name"`
-	Type              string `json:"type"`
-	URL               string `json:"url"`
-	Hostname          string `json:"hostname"`
-	Port              int64  `json:"port"`
-	IntervalSeconds   int64  `json:"interval_seconds"`
-	TimeoutSeconds    int64  `json:"timeout_seconds"`
-	FailureThreshold  int64  `json:"failure_threshold"`
-	TemplateDown      string `json:"template_down"`
-	TemplateRecovered string `json:"template_recovered"`
+	Name              string   `json:"name"`
+	Type              string   `json:"type"`
+	URL               string   `json:"url"`
+	Hostname          string   `json:"hostname"`
+	Port              int64    `json:"port"`
+	IntervalSeconds   int64    `json:"interval_seconds"`
+	TimeoutSeconds    int64    `json:"timeout_seconds"`
+	FailureThreshold  int64    `json:"failure_threshold"`
+	TemplateDown      string   `json:"template_down"`
+	TemplateRecovered string   `json:"template_recovered"`
+	Tags              []string `json:"tags"`
 }

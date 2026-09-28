@@ -112,6 +112,7 @@ func (s *Server) Router() http.Handler {
 				if s.slack != nil {
 					s.mountProjectSlackRoutes(r)
 				}
+				r.Get("/monitors", s.listMonitors)
 				r.Route("/services", func(r chi.Router) {
 					r.Get("/", s.listServices)
 					r.Group(func(r chi.Router) {
@@ -136,6 +137,7 @@ func (s *Server) Router() http.Handler {
 							r.Delete("/", s.deleteService)
 							r.Post("/pause", s.setServiceEnabled(false))
 							r.Post("/resume", s.setServiceEnabled(true))
+							r.Post("/clone", s.cloneService)
 						})
 					})
 				})
