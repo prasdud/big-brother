@@ -1,0 +1,46 @@
+schema: spec-driven
+
+context: |
+  Project: big-brother — open-source, pluggable uptime monitoring and Slack alerting.
+
+  Tech stack:
+  - Backend: Go, chi, slog, sqlc, goose
+  - Database: SQLite only (WAL, single writer) — Postgres is intentionally out of scope forever
+  - Frontend: React, Vite, TypeScript, TanStack Query/Router, Tailwind, shadcn/ui
+  - Packaging: single binary via go:embed of the built web app
+
+  Product model:
+  - One deployment = one workspace (the organization)
+  - Workspace contains projects; a project contains services
+  - A service is one monitored thing with one check config
+  - Roles live at the workspace level: admin, member, viewer
+  - Every project-owned table carries project_id
+  - Resources are API-addressable by a stable, immutable slug
+
+  Product language:
+  - Write proposals and specs in user-facing product behavior language
+  - Requirements describe observable behavior and the product contract
+  - Put internal mechanisms in design.md or tasks.md unless the mechanism is part of the contract
+  - Use one term per concept; no synonyms in code, schema, UI, or docs
+
+  Deliverable sequencing:
+  - M1 scaffold and resource CRUD
+  - M2 check engine
+  - M3 auth and roles
+  - M4 Slack and alerting
+  - M5 web UI
+  - M6 operations, OpenAPI client, and Kuma import
+
+rules:
+  specs:
+    - Every requirement uses SHALL or MUST and has at least one scenario
+    - Scenarios use GIVEN / WHEN / THEN
+    - Prefer user-facing outcomes over internal implementation mechanics
+    - State when an API surface is expected to remain stable for config-as-code
+  tasks:
+    - Every task is a verifiable unit of work
+    - Include a verification step (test, command, or manual check) for each work section
+  design:
+    - Prefer stdlib and the existing stack; add a dependency only if it removes substantial code
+    - No abstraction until a second use exists
+    - Keep the single-binary and SQLite-only constraints in every design decision
