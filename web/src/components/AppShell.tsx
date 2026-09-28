@@ -13,6 +13,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { AppSidebar } from "@/components/app-sidebar";
+import { ProjectNav } from "@/components/project-nav";
 import { useSession } from "@/lib/session";
 import { useProjects } from "@/lib/project";
 
@@ -80,8 +81,11 @@ export function AppShell() {
             </Button>
           ) : null}
         </header>
-        <div className="flex flex-1 flex-col gap-4 p-4 md:p-6">
-          <Outlet />
+        <div className="flex flex-1 overflow-hidden">
+          <ProjectNav />
+          <div className="flex flex-1 flex-col gap-4 overflow-auto p-4 md:p-6">
+            <Outlet />
+          </div>
         </div>
       </SidebarInset>
     </SidebarProvider>
