@@ -16,11 +16,29 @@ function slots(beats: Heartbeat[], total = TOTAL): (Heartbeat | null)[] {
 }
 
 /** Miniature uptime bars for a monitor row. */
-export function HeartbeatBars({ beats }: { beats: Heartbeat[] }) {
+export function HeartbeatBars({
+  beats,
+  bars = TOTAL,
+  size = "md",
+}: {
+  beats: Heartbeat[];
+  bars?: number;
+  size?: "sm" | "md";
+}) {
   return (
-    <div className="flex shrink-0 items-end gap-[2px]" aria-hidden>
-      {slots(beats).map((beat, index) => (
-        <span key={index} className={cn("h-6 w-1 rounded-full", barClass(beat?.status))} />
+    <div
+      className={cn("flex shrink-0 items-end", size === "sm" ? "gap-px" : "gap-[2px]")}
+      aria-hidden
+    >
+      {slots(beats, bars).map((beat, index) => (
+        <span
+          key={index}
+          className={cn(
+            "rounded-full",
+            size === "sm" ? "h-5 w-[3px]" : "h-6 w-1",
+            barClass(beat?.status),
+          )}
+        />
       ))}
     </div>
   );

@@ -152,7 +152,7 @@ export function Services() {
         <h1 className="text-display text-muted-foreground">{project.name}</h1>
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-[minmax(320px,32%)_1fr]">
+      <div className="grid gap-4 lg:grid-cols-[minmax(360px,34%)_1fr]">
         {/* Monitor list */}
         <Card className="flex max-h-[calc(100svh-11rem)] flex-col overflow-hidden">
           <CardContent className="flex min-h-0 flex-1 flex-col gap-3 p-4">
@@ -242,7 +242,7 @@ export function Services() {
                   >
                     <span
                       className={cn(
-                        "inline-flex min-w-9 items-center justify-center rounded-full px-1.5 py-0.5 text-[11px] font-medium tabular-nums",
+                        "inline-flex min-w-8 shrink-0 items-center justify-center rounded-full px-1 py-0.5 text-[10px] font-medium tabular-nums",
                         uptimePillClass(monitor),
                       )}
                     >
@@ -264,7 +264,7 @@ export function Services() {
                         </div>
                       ) : null}
                     </div>
-                    <HeartbeatBars beats={monitor.heartbeats} />
+                    <HeartbeatBars beats={monitor.heartbeats} bars={16} size="sm" />
                   </button>
                 ))
               )}
