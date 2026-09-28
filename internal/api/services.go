@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"fmt"
@@ -165,18 +166,56 @@ func (s *Server) setServiceEnabled(enabled bool) http.HandlerFunc {
 		if enabled {
 			flag = 1
 		}
+		now := store.NowUTC()
 		if err := s.q.SetServiceEnabled(r.Context(), store.SetServiceEnabledParams{
 			Enabled:   flag,
-			UpdatedAt: store.NowUTC(),
+			UpdatedAt: now,
 			ID:        svc.ID,
 		}); err != nil {
 			serverError(w, err)
 			return
 		}
+		// A paused service is not checked; a resumed service is due again.
+		if err := s.q.SetServiceNextRun(r.Context(), store.SetServiceNextRunParams{
+			NextRunAt: sql.NullString{},
+			ID:        svc.ID,
+		}); err != nil {
+			serverError(w, err)
+			return
+		}
+		state := "paused"
+		if enabled {
+			state = "pending"
+		}
+		if err := s.setState(r.Context(), svc, state); err != nil {
+			serverError(w, err)
+			return
+		}
 		svc.Enabled = flag
-		svc.UpdatedAt = store.NowUTC()
+		svc.UpdatedAt = now
 		writeJSON(w, http.StatusOK, newServiceView(svc))
 	}
+}
+
+// setState writes a service state row, preserving the last check time and only
+// advancing the last-change time when the state actually changes.
+func (s *Server) setState(ctx context.Context, svc store.Service, state string) error {
+	params := store.UpsertServiceStateParams{
+		ServiceID:    svc.ID,
+		ProjectID:    svc.ProjectID,
+		State:        state,
+		LastChangeAt: store.NowUTC(),
+	}
+	st, err := s.q.GetServiceState(ctx, svc.ID)
+	if err == nil {
+		params.LastCheckAt = st.LastCheckAt
+		if st.State == state {
+			params.LastChangeAt = st.LastChangeAt
+		}
+	} else if !errors.Is(err, sql.ErrNoRows) {
+		return err
+	}
+	return s.q.UpsertServiceState(ctx, params)
 }
 
 // serviceFromPath loads the project and service named by the path slugs.

@@ -8,6 +8,17 @@ import (
 	"database/sql"
 )
 
+type Check struct {
+	ID         string
+	ServiceID  string
+	ProjectID  string
+	CheckedAt  string
+	Status     string
+	StatusCode int64
+	LatencyMs  int64
+	Error      string
+}
+
 type Project struct {
 	ID          string
 	WorkspaceID string
@@ -29,8 +40,27 @@ type Service struct {
 	TimeoutSeconds   int64
 	FailureThreshold int64
 	Enabled          int64
+	NextRunAt        sql.NullString
 	CreatedAt        string
 	UpdatedAt        string
+}
+
+type ServiceState struct {
+	ServiceID            string
+	ProjectID            string
+	State                string
+	ConsecutiveFailures  int64
+	ConsecutiveSuccesses int64
+	LastChangeAt         string
+	LastCheckAt          sql.NullString
+}
+
+type UptimeRollup struct {
+	ServiceID   string
+	ProjectID   string
+	Hour        string
+	UpChecks    int64
+	TotalChecks int64
 }
 
 type User struct {

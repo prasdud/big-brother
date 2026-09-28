@@ -63,3 +63,74 @@ WHERE id = sqlc.arg(id);
 
 -- name: DeleteService :exec
 DELETE FROM services WHERE id = sqlc.arg(id);
+
+-- name: ListDueServices :many
+SELECT * FROM services
+WHERE enabled = 1 AND (next_run_at IS NULL OR next_run_at <= sqlc.arg(now))
+ORDER BY COALESCE(next_run_at, '') ASC
+LIMIT sqlc.arg(max_rows);
+
+-- name: SetServiceNextRun :exec
+UPDATE services SET next_run_at = sqlc.arg(next_run_at) WHERE id = sqlc.arg(id);
+
+-- name: InsertCheck :exec
+INSERT INTO checks (
+    id, service_id, project_id, checked_at, status, status_code, latency_ms, error
+) VALUES (
+    sqlc.arg(id), sqlc.arg(service_id), sqlc.arg(project_id), sqlc.arg(checked_at),
+    sqlc.arg(status), sqlc.arg(status_code), sqlc.arg(latency_ms), sqlc.arg(error)
+);
+
+-- name: ListChecks :many
+SELECT * FROM checks
+WHERE service_id = sqlc.arg(service_id)
+  AND checked_at >= sqlc.arg(from_at)
+  AND checked_at <= sqlc.arg(to_at)
+ORDER BY checked_at DESC
+LIMIT sqlc.arg(max_rows);
+
+-- name: PruneChecksBefore :execrows
+DELETE FROM checks
+WHERE id IN (
+    SELECT c.id FROM checks AS c
+    WHERE c.checked_at < sqlc.arg(before)
+    ORDER BY c.checked_at
+    LIMIT sqlc.arg(max_rows)
+);
+
+-- name: GetServiceState :one
+SELECT * FROM service_state WHERE service_id = sqlc.arg(service_id);
+
+-- name: ListServiceStatesByProject :many
+SELECT * FROM service_state WHERE project_id = sqlc.arg(project_id);
+
+-- name: UpsertServiceState :exec
+INSERT INTO service_state (
+    service_id, project_id, state, consecutive_failures,
+    consecutive_successes, last_change_at, last_check_at
+) VALUES (
+    sqlc.arg(service_id), sqlc.arg(project_id), sqlc.arg(state),
+    sqlc.arg(consecutive_failures), sqlc.arg(consecutive_successes),
+    sqlc.arg(last_change_at), sqlc.arg(last_check_at)
+)
+ON CONFLICT (service_id) DO UPDATE SET
+    state = excluded.state,
+    consecutive_failures = excluded.consecutive_failures,
+    consecutive_successes = excluded.consecutive_successes,
+    last_change_at = excluded.last_change_at,
+    last_check_at = excluded.last_check_at;
+
+-- name: UpsertRollup :exec
+INSERT INTO uptime_rollups (service_id, project_id, hour, up_checks, total_checks)
+VALUES (sqlc.arg(service_id), sqlc.arg(project_id), sqlc.arg(hour),
+        sqlc.arg(up_checks), sqlc.arg(total_checks))
+ON CONFLICT (service_id, hour) DO UPDATE SET
+    up_checks = up_checks + excluded.up_checks,
+    total_checks = total_checks + excluded.total_checks;
+
+-- name: SumUptime :one
+SELECT
+    CAST(COALESCE(SUM(up_checks), 0) AS INTEGER)    AS up_checks,
+    CAST(COALESCE(SUM(total_checks), 0) AS INTEGER) AS total_checks
+FROM uptime_rollups
+WHERE service_id = sqlc.arg(service_id) AND hour >= sqlc.arg(from_hour);

@@ -15,6 +15,7 @@ type Config struct {
 	BaseURL       string
 	RetentionDays int
 	SecretKey     string
+	CheckWorkers  int
 }
 
 // Load reads configuration from environment variables, applying defaults.
@@ -25,6 +26,7 @@ func Load() (Config, error) {
 		BaseURL:       env("BB_BASE_URL", "http://localhost:8080"),
 		RetentionDays: 30,
 		SecretKey:     os.Getenv("BB_SECRET_KEY"),
+		CheckWorkers:  16,
 	}
 
 	if v := os.Getenv("BB_RETENTION_DAYS"); v != "" {
@@ -33,6 +35,14 @@ func Load() (Config, error) {
 			return c, fmt.Errorf("BB_RETENTION_DAYS must be a positive integer, got %q", v)
 		}
 		c.RetentionDays = n
+	}
+
+	if v := os.Getenv("BB_CHECK_WORKERS"); v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil || n <= 0 {
+			return c, fmt.Errorf("BB_CHECK_WORKERS must be a positive integer, got %q", v)
+		}
+		c.CheckWorkers = n
 	}
 
 	level, err := parseLevel(env("BB_LOG_LEVEL", "info"))

@@ -9,13 +9,17 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 	"time"
 
 	"github.com/prasdud/big-brother/internal/api"
+	"github.com/prasdud/big-brother/internal/check"
 	"github.com/prasdud/big-brother/internal/config"
 	"github.com/prasdud/big-brother/internal/db"
 	"github.com/prasdud/big-brother/internal/metrics"
+	"github.com/prasdud/big-brother/internal/monitor"
+	"github.com/prasdud/big-brother/internal/scheduler"
 	"github.com/prasdud/big-brother/internal/store"
 	"github.com/prasdud/big-brother/internal/web"
 )
@@ -69,29 +73,52 @@ func run() error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
+	emit := func(e monitor.Event) {
+		logger.Info("state change",
+			"service_id", e.ServiceID,
+			"from", e.From,
+			"to", e.To,
+		)
+	}
+	mon := monitor.New(q, emit)
+	sch := scheduler.New(q, check.New(), mon, logger, cfg.CheckWorkers, cfg.RetentionDays)
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		sch.Run(ctx)
+	}()
+
 	errCh := make(chan error, 1)
 	go func() {
 		logger.Info("server starting",
 			"addr", cfg.Addr,
 			"db", cfg.DBPath,
 			"workspace", workspace.Slug,
+			"check_workers", cfg.CheckWorkers,
 		)
 		if err := httpSrv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			errCh <- err
 		}
 	}()
 
+	var runErr error
 	select {
-	case err := <-errCh:
-		return err
+	case runErr = <-errCh:
 	case <-ctx.Done():
 		logger.Info("shutdown requested")
 	}
+	stop()
 
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	if err := httpSrv.Shutdown(shutdownCtx); err != nil {
-		return err
+	if err := httpSrv.Shutdown(shutdownCtx); err != nil && runErr == nil {
+		runErr = err
+	}
+	wg.Wait()
+	if runErr != nil {
+		return runErr
 	}
 	logger.Info("shutdown complete")
 	return nil

@@ -7,6 +7,7 @@ package store
 
 import (
 	"context"
+	"database/sql"
 )
 
 const countWorkspaces = `-- name: CountWorkspaces :one
@@ -154,7 +155,7 @@ func (q *Queries) GetProjectBySlug(ctx context.Context, slug string) (Project, e
 }
 
 const getServiceBySlug = `-- name: GetServiceBySlug :one
-SELECT id, project_id, name, slug, type, url, hostname, port, interval_seconds, timeout_seconds, failure_threshold, enabled, created_at, updated_at FROM services
+SELECT id, project_id, name, slug, type, url, hostname, port, interval_seconds, timeout_seconds, failure_threshold, enabled, next_run_at, created_at, updated_at FROM services
 WHERE project_id = ?1 AND slug = ?2
 `
 
@@ -179,8 +180,28 @@ func (q *Queries) GetServiceBySlug(ctx context.Context, arg GetServiceBySlugPara
 		&i.TimeoutSeconds,
 		&i.FailureThreshold,
 		&i.Enabled,
+		&i.NextRunAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getServiceState = `-- name: GetServiceState :one
+SELECT service_id, project_id, state, consecutive_failures, consecutive_successes, last_change_at, last_check_at FROM service_state WHERE service_id = ?1
+`
+
+func (q *Queries) GetServiceState(ctx context.Context, serviceID string) (ServiceState, error) {
+	row := q.db.QueryRowContext(ctx, getServiceState, serviceID)
+	var i ServiceState
+	err := row.Scan(
+		&i.ServiceID,
+		&i.ProjectID,
+		&i.State,
+		&i.ConsecutiveFailures,
+		&i.ConsecutiveSuccesses,
+		&i.LastChangeAt,
+		&i.LastCheckAt,
 	)
 	return i, err
 }
@@ -199,6 +220,144 @@ func (q *Queries) GetWorkspace(ctx context.Context) (Workspace, error) {
 		&i.CreatedAt,
 	)
 	return i, err
+}
+
+const insertCheck = `-- name: InsertCheck :exec
+INSERT INTO checks (
+    id, service_id, project_id, checked_at, status, status_code, latency_ms, error
+) VALUES (
+    ?1, ?2, ?3, ?4,
+    ?5, ?6, ?7, ?8
+)
+`
+
+type InsertCheckParams struct {
+	ID         string
+	ServiceID  string
+	ProjectID  string
+	CheckedAt  string
+	Status     string
+	StatusCode int64
+	LatencyMs  int64
+	Error      string
+}
+
+func (q *Queries) InsertCheck(ctx context.Context, arg InsertCheckParams) error {
+	_, err := q.db.ExecContext(ctx, insertCheck,
+		arg.ID,
+		arg.ServiceID,
+		arg.ProjectID,
+		arg.CheckedAt,
+		arg.Status,
+		arg.StatusCode,
+		arg.LatencyMs,
+		arg.Error,
+	)
+	return err
+}
+
+const listChecks = `-- name: ListChecks :many
+SELECT id, service_id, project_id, checked_at, status, status_code, latency_ms, error FROM checks
+WHERE service_id = ?1
+  AND checked_at >= ?2
+  AND checked_at <= ?3
+ORDER BY checked_at DESC
+LIMIT ?4
+`
+
+type ListChecksParams struct {
+	ServiceID string
+	FromAt    string
+	ToAt      string
+	MaxRows   int64
+}
+
+func (q *Queries) ListChecks(ctx context.Context, arg ListChecksParams) ([]Check, error) {
+	rows, err := q.db.QueryContext(ctx, listChecks,
+		arg.ServiceID,
+		arg.FromAt,
+		arg.ToAt,
+		arg.MaxRows,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Check
+	for rows.Next() {
+		var i Check
+		if err := rows.Scan(
+			&i.ID,
+			&i.ServiceID,
+			&i.ProjectID,
+			&i.CheckedAt,
+			&i.Status,
+			&i.StatusCode,
+			&i.LatencyMs,
+			&i.Error,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listDueServices = `-- name: ListDueServices :many
+SELECT id, project_id, name, slug, type, url, hostname, port, interval_seconds, timeout_seconds, failure_threshold, enabled, next_run_at, created_at, updated_at FROM services
+WHERE enabled = 1 AND (next_run_at IS NULL OR next_run_at <= ?1)
+ORDER BY COALESCE(next_run_at, '') ASC
+LIMIT ?2
+`
+
+type ListDueServicesParams struct {
+	Now     sql.NullString
+	MaxRows int64
+}
+
+func (q *Queries) ListDueServices(ctx context.Context, arg ListDueServicesParams) ([]Service, error) {
+	rows, err := q.db.QueryContext(ctx, listDueServices, arg.Now, arg.MaxRows)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Service
+	for rows.Next() {
+		var i Service
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.Name,
+			&i.Slug,
+			&i.Type,
+			&i.Url,
+			&i.Hostname,
+			&i.Port,
+			&i.IntervalSeconds,
+			&i.TimeoutSeconds,
+			&i.FailureThreshold,
+			&i.Enabled,
+			&i.NextRunAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listProjects = `-- name: ListProjects :many
@@ -234,8 +393,43 @@ func (q *Queries) ListProjects(ctx context.Context) ([]Project, error) {
 	return items, nil
 }
 
+const listServiceStatesByProject = `-- name: ListServiceStatesByProject :many
+SELECT service_id, project_id, state, consecutive_failures, consecutive_successes, last_change_at, last_check_at FROM service_state WHERE project_id = ?1
+`
+
+func (q *Queries) ListServiceStatesByProject(ctx context.Context, projectID string) ([]ServiceState, error) {
+	rows, err := q.db.QueryContext(ctx, listServiceStatesByProject, projectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ServiceState
+	for rows.Next() {
+		var i ServiceState
+		if err := rows.Scan(
+			&i.ServiceID,
+			&i.ProjectID,
+			&i.State,
+			&i.ConsecutiveFailures,
+			&i.ConsecutiveSuccesses,
+			&i.LastChangeAt,
+			&i.LastCheckAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listServices = `-- name: ListServices :many
-SELECT id, project_id, name, slug, type, url, hostname, port, interval_seconds, timeout_seconds, failure_threshold, enabled, created_at, updated_at FROM services WHERE project_id = ?1 ORDER BY name
+SELECT id, project_id, name, slug, type, url, hostname, port, interval_seconds, timeout_seconds, failure_threshold, enabled, next_run_at, created_at, updated_at FROM services WHERE project_id = ?1 ORDER BY name
 `
 
 func (q *Queries) ListServices(ctx context.Context, projectID string) ([]Service, error) {
@@ -260,6 +454,7 @@ func (q *Queries) ListServices(ctx context.Context, projectID string) ([]Service
 			&i.TimeoutSeconds,
 			&i.FailureThreshold,
 			&i.Enabled,
+			&i.NextRunAt,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 		); err != nil {
@@ -274,6 +469,29 @@ func (q *Queries) ListServices(ctx context.Context, projectID string) ([]Service
 		return nil, err
 	}
 	return items, nil
+}
+
+const pruneChecksBefore = `-- name: PruneChecksBefore :execrows
+DELETE FROM checks
+WHERE id IN (
+    SELECT c.id FROM checks AS c
+    WHERE c.checked_at < ?1
+    ORDER BY c.checked_at
+    LIMIT ?2
+)
+`
+
+type PruneChecksBeforeParams struct {
+	Before  string
+	MaxRows int64
+}
+
+func (q *Queries) PruneChecksBefore(ctx context.Context, arg PruneChecksBeforeParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, pruneChecksBefore, arg.Before, arg.MaxRows)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
 }
 
 const renameProject = `-- name: RenameProject :exec
@@ -304,6 +522,45 @@ type SetServiceEnabledParams struct {
 func (q *Queries) SetServiceEnabled(ctx context.Context, arg SetServiceEnabledParams) error {
 	_, err := q.db.ExecContext(ctx, setServiceEnabled, arg.Enabled, arg.UpdatedAt, arg.ID)
 	return err
+}
+
+const setServiceNextRun = `-- name: SetServiceNextRun :exec
+UPDATE services SET next_run_at = ?1 WHERE id = ?2
+`
+
+type SetServiceNextRunParams struct {
+	NextRunAt sql.NullString
+	ID        string
+}
+
+func (q *Queries) SetServiceNextRun(ctx context.Context, arg SetServiceNextRunParams) error {
+	_, err := q.db.ExecContext(ctx, setServiceNextRun, arg.NextRunAt, arg.ID)
+	return err
+}
+
+const sumUptime = `-- name: SumUptime :one
+SELECT
+    CAST(COALESCE(SUM(up_checks), 0) AS INTEGER)    AS up_checks,
+    CAST(COALESCE(SUM(total_checks), 0) AS INTEGER) AS total_checks
+FROM uptime_rollups
+WHERE service_id = ?1 AND hour >= ?2
+`
+
+type SumUptimeParams struct {
+	ServiceID string
+	FromHour  string
+}
+
+type SumUptimeRow struct {
+	UpChecks    int64
+	TotalChecks int64
+}
+
+func (q *Queries) SumUptime(ctx context.Context, arg SumUptimeParams) (SumUptimeRow, error) {
+	row := q.db.QueryRowContext(ctx, sumUptime, arg.ServiceID, arg.FromHour)
+	var i SumUptimeRow
+	err := row.Scan(&i.UpChecks, &i.TotalChecks)
+	return i, err
 }
 
 const updateService = `-- name: UpdateService :exec
@@ -342,6 +599,74 @@ func (q *Queries) UpdateService(ctx context.Context, arg UpdateServiceParams) er
 		arg.FailureThreshold,
 		arg.UpdatedAt,
 		arg.ID,
+	)
+	return err
+}
+
+const upsertRollup = `-- name: UpsertRollup :exec
+INSERT INTO uptime_rollups (service_id, project_id, hour, up_checks, total_checks)
+VALUES (?1, ?2, ?3,
+        ?4, ?5)
+ON CONFLICT (service_id, hour) DO UPDATE SET
+    up_checks = up_checks + excluded.up_checks,
+    total_checks = total_checks + excluded.total_checks
+`
+
+type UpsertRollupParams struct {
+	ServiceID   string
+	ProjectID   string
+	Hour        string
+	UpChecks    int64
+	TotalChecks int64
+}
+
+func (q *Queries) UpsertRollup(ctx context.Context, arg UpsertRollupParams) error {
+	_, err := q.db.ExecContext(ctx, upsertRollup,
+		arg.ServiceID,
+		arg.ProjectID,
+		arg.Hour,
+		arg.UpChecks,
+		arg.TotalChecks,
+	)
+	return err
+}
+
+const upsertServiceState = `-- name: UpsertServiceState :exec
+INSERT INTO service_state (
+    service_id, project_id, state, consecutive_failures,
+    consecutive_successes, last_change_at, last_check_at
+) VALUES (
+    ?1, ?2, ?3,
+    ?4, ?5,
+    ?6, ?7
+)
+ON CONFLICT (service_id) DO UPDATE SET
+    state = excluded.state,
+    consecutive_failures = excluded.consecutive_failures,
+    consecutive_successes = excluded.consecutive_successes,
+    last_change_at = excluded.last_change_at,
+    last_check_at = excluded.last_check_at
+`
+
+type UpsertServiceStateParams struct {
+	ServiceID            string
+	ProjectID            string
+	State                string
+	ConsecutiveFailures  int64
+	ConsecutiveSuccesses int64
+	LastChangeAt         string
+	LastCheckAt          sql.NullString
+}
+
+func (q *Queries) UpsertServiceState(ctx context.Context, arg UpsertServiceStateParams) error {
+	_, err := q.db.ExecContext(ctx, upsertServiceState,
+		arg.ServiceID,
+		arg.ProjectID,
+		arg.State,
+		arg.ConsecutiveFailures,
+		arg.ConsecutiveSuccesses,
+		arg.LastChangeAt,
+		arg.LastCheckAt,
 	)
 	return err
 }
