@@ -83,6 +83,16 @@ func TestSlackChannelsAndChannelsRBAC(t *testing.T) {
 		t.Fatalf("channel = %+v", cv)
 	}
 
+	// The project exposes its default channel and a list of its channels.
+	rec = e.do(t, http.MethodGet, "/api/v1/projects/pay", "", adminTok, "")
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), cv.ChannelID) {
+		t.Fatalf("project = %d, body = %s", rec.Code, rec.Body.String())
+	}
+	rec = e.do(t, http.MethodGet, "/api/v1/projects/pay/channels", "", adminTok, "")
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "C1") {
+		t.Fatalf("project channels = %d, body = %s", rec.Code, rec.Body.String())
+	}
+
 	viewerTok, viewerCSRF := e.userSession(t, "viewer@example.com", auth.RoleViewer)
 	rec = e.do(t, http.MethodPut, "/api/v1/projects/pay/channel",
 		`{"slack_channel_id":"C1"}`, viewerTok, viewerCSRF)

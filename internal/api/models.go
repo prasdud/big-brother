@@ -3,10 +3,11 @@ package api
 import "github.com/prasdud/big-brother/internal/store"
 
 type projectView struct {
-	ID        string `json:"id"`
-	Name      string `json:"name"`
-	Slug      string `json:"slug"`
-	CreatedAt string `json:"created_at"`
+	ID               string `json:"id"`
+	Name             string `json:"name"`
+	Slug             string `json:"slug"`
+	DefaultChannelID string `json:"default_channel_id"`
+	CreatedAt        string `json:"created_at"`
 }
 
 type serviceView struct {
@@ -30,7 +31,13 @@ type serviceView struct {
 }
 
 func newProjectView(p store.Project) projectView {
-	return projectView{ID: p.ID, Name: p.Name, Slug: p.Slug, CreatedAt: p.CreatedAt}
+	return projectView{
+		ID:               p.ID,
+		Name:             p.Name,
+		Slug:             p.Slug,
+		DefaultChannelID: p.DefaultChannelID,
+		CreatedAt:        p.CreatedAt,
+	}
 }
 
 func newServiceView(s store.Service) serviceView {

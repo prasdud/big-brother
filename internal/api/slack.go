@@ -127,6 +127,24 @@ func (s *Server) slackChannels(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, out)
 }
 
+func (s *Server) listProjectChannels(w http.ResponseWriter, r *http.Request) {
+	p, err := s.projectFromPath(r)
+	if err != nil {
+		notFound(w)
+		return
+	}
+	rows, err := s.q.ListChannelsByProject(r.Context(), p.ID)
+	if err != nil {
+		serverError(w, err)
+		return
+	}
+	out := make([]channelView, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, channelView{ChannelID: row.ID, SlackChannelID: row.SlackChannelID, Name: row.Name})
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
 func (s *Server) setProjectChannel(w http.ResponseWriter, r *http.Request) {
 	p, err := s.projectFromPath(r)
 	if err != nil {

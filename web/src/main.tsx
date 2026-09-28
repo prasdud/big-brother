@@ -1,36 +1,29 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import {
-  RouterProvider,
-  createRootRoute,
-  createRoute,
-  createRouter,
-} from "@tanstack/react-router";
-import { Home } from "./Home";
+import { RouterProvider } from "@tanstack/react-router";
+import { router } from "./router";
+import { SessionProvider } from "./lib/session";
+import { ProjectProvider } from "./lib/project";
+import { ToastProvider } from "./components/Toast";
 import "./index.css";
 
-const rootRoute = createRootRoute();
-const indexRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: "/",
-  component: Home,
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: { retry: false, refetchOnWindowFocus: false },
+  },
 });
-const routeTree = rootRoute.addChildren([indexRoute]);
-const router = createRouter({ routeTree });
-
-declare module "@tanstack/react-router" {
-  interface Register {
-    router: typeof router;
-  }
-}
-
-const queryClient = new QueryClient();
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
-      <RouterProvider router={router} />
+      <ToastProvider>
+        <SessionProvider>
+          <ProjectProvider>
+            <RouterProvider router={router} />
+          </ProjectProvider>
+        </SessionProvider>
+      </ToastProvider>
     </QueryClientProvider>
   </StrictMode>,
 );

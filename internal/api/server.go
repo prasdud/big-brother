@@ -77,6 +77,14 @@ func (s *Server) Router() http.Handler {
 				})
 			})
 		})
+	} else {
+		// Signal to the web app that authentication is not configured.
+		authDisabled := func(w http.ResponseWriter, _ *http.Request) {
+			writeError(w, http.StatusNotFound, "auth_disabled", "authentication is not configured")
+		}
+		r.Get("/auth/login", authDisabled)
+		r.Get("/auth/callback", authDisabled)
+		r.Get("/auth/me", authDisabled)
 	}
 
 	r.Route("/api/v1", func(r chi.Router) {
@@ -170,6 +178,7 @@ func (s *Server) mountProjectSlackRoutes(r chi.Router) {
 		r.Post("/alert-templates/test-send", s.testSendAlert)
 	})
 	r.Get("/alert-templates", s.listAlertTemplates)
+	r.Get("/channels", s.listProjectChannels)
 	r.Get("/deliveries", s.listDeliveries)
 }
 
