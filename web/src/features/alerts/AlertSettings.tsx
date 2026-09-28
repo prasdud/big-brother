@@ -1,11 +1,20 @@
 import { useEffect, useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { alertsApi } from "../../lib/api";
-import { errorMessage } from "../../lib/format";
-import { useProjects } from "../../lib/project";
-import { useSession } from "../../lib/session";
-import { useToast } from "../../components/Toast";
-import { Button, Card, CardBody, CardHeader, Spinner, Textarea } from "../../components/ui";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import { toast } from "sonner";
+import { alertsApi } from "@/lib/api";
+import { errorMessage } from "@/lib/format";
+import { useProjects } from "@/lib/project";
+import { useSession } from "@/lib/session";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Textarea } from "@/components/ui/textarea";
 
 const variables = ["service.name", "service.url", "project.name", "status", "duration", "error"];
 
@@ -13,14 +22,23 @@ interface EditorProps {
   project: string;
   trigger: "down" | "recovered";
   title: string;
+  description: string;
   body: string;
   setBody: (value: string) => void;
   channelID: string;
   canWrite: boolean;
 }
 
-function TemplateEditor({ project, trigger, title, body, setBody, channelID, canWrite }: EditorProps) {
-  const toast = useToast();
+function TemplateEditor({
+  project,
+  trigger,
+  title,
+  description,
+  body,
+  setBody,
+  channelID,
+  canWrite,
+}: EditorProps) {
   const [preview, setPreview] = useState("");
 
   useEffect(() => {
@@ -39,57 +57,55 @@ function TemplateEditor({ project, trigger, title, body, setBody, channelID, can
 
   const save = useMutation({
     mutationFn: () => alertsApi.saveTemplate(project, trigger, body),
-    onSuccess: () => toast.push("success", "Template saved"),
-    onError: (error) => toast.push("error", errorMessage(error)),
+    onSuccess: () => toast.success("Template saved"),
+    onError: (error) => toast.error(errorMessage(error)),
   });
 
   const test = useMutation({
     mutationFn: () => alertsApi.testSend(project, trigger, body, channelID),
-    onSuccess: () => toast.push("success", "Test alert sent"),
-    onError: (error) => toast.push("error", errorMessage(error)),
+    onSuccess: () => toast.success("Test alert sent"),
+    onError: (error) => toast.error(errorMessage(error)),
   });
-
-  const insert = (variable: string) => setBody(`${body}{{${variable}}}`);
 
   return (
     <Card>
-      <CardHeader
-        title={title}
-        actions={
-          canWrite ? (
-            <div className="flex gap-2">
-              <Button variant="secondary" onClick={() => test.mutate()} disabled={test.isPending}>
-                Test send
-              </Button>
-              <Button onClick={() => save.mutate()} disabled={save.isPending || !body.trim()}>
-                Save
-              </Button>
-            </div>
-          ) : null
-        }
-      />
-      <CardBody className="space-y-3">
+      <CardHeader>
+        <CardTitle>{title}</CardTitle>
+        <CardDescription>{description}</CardDescription>
+        {canWrite ? (
+          <div className="ml-auto flex gap-2">
+            <Button variant="outline" size="sm" onClick={() => test.mutate()} disabled={test.isPending}>
+              Test send
+            </Button>
+            <Button size="sm" onClick={() => save.mutate()} disabled={save.isPending || !body.trim()}>
+              Save
+            </Button>
+          </div>
+        ) : null}
+      </CardHeader>
+      <CardContent className="space-y-3">
         <div className="flex flex-wrap gap-1">
           {variables.map((variable) => (
-            <button
+            <Button
               key={variable}
               type="button"
+              variant="outline"
+              size="xs"
               disabled={!canWrite}
-              onClick={() => insert(variable)}
-              className="rounded bg-slate-100 px-2 py-0.5 text-xs text-slate-700 hover:bg-slate-200 disabled:opacity-50"
+              onClick={() => setBody(`${body}{{${variable}}}`)}
             >
               {`{{${variable}}}`}
-            </button>
+            </Button>
           ))}
         </div>
         <Textarea rows={6} value={body} disabled={!canWrite} onChange={(e) => setBody(e.target.value)} />
         <div>
-          <p className="mb-1 text-xs font-medium uppercase text-slate-500">Preview</p>
-          <pre className="whitespace-pre-wrap rounded-md bg-slate-50 p-3 text-sm text-slate-700">
+          <p className="mb-1 text-label uppercase text-muted-foreground">Preview</p>
+          <pre className="min-h-[4rem] whitespace-pre-wrap rounded-lg border border-border bg-muted/40 p-3 text-sm">
             {preview || "—"}
           </pre>
         </div>
-      </CardBody>
+      </CardContent>
     </Card>
   );
 }
@@ -97,7 +113,6 @@ function TemplateEditor({ project, trigger, title, body, setBody, channelID, can
 export function AlertSettings() {
   const { project } = useProjects();
   const { canWrite } = useSession();
-  const queryClient = useQueryClient();
   const [down, setDown] = useState("");
   const [recovered, setRecovered] = useState("");
 
@@ -115,20 +130,20 @@ export function AlertSettings() {
     }
   }, [templates.data]);
 
-  useEffect(() => {
-    if (project) void queryClient.invalidateQueries({ queryKey: ["project-channels", project.slug] });
-  }, [project, queryClient]);
-
-  if (!project) return <p className="text-sm text-slate-600">Select a project first.</p>;
-  if (templates.isLoading) return <Spinner />;
+  if (!project) return <p className="text-sm text-muted-foreground">Select a project first.</p>;
+  if (templates.isLoading) return <Skeleton className="h-96 w-full" />;
 
   return (
     <div className="space-y-4">
-      <h1 className="text-lg font-semibold text-slate-900">Alert templates</h1>
+      <div>
+        <h1 className="text-h1">Alert templates</h1>
+        <p className="text-sm text-muted-foreground">Messages sent to Slack on state changes.</p>
+      </div>
       <TemplateEditor
         project={project.slug}
         trigger="down"
         title="Down alert"
+        description="Sent when a service is confirmed down."
         body={down}
         setBody={setDown}
         channelID={project.default_channel_id}
@@ -138,6 +153,7 @@ export function AlertSettings() {
         project={project.slug}
         trigger="recovered"
         title="Recovery alert"
+        description="Sent when a service recovers."
         body={recovered}
         setBody={setRecovered}
         channelID={project.default_channel_id}

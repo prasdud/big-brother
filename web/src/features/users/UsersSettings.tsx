@@ -1,157 +1,215 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { usersApi } from "../../lib/api";
-import { errorMessage } from "../../lib/format";
-import { useSession } from "../../lib/session";
-import { useToast } from "../../components/Toast";
-import { Button, Card, CardBody, CardHeader, ErrorText, Field, Input, Select, Spinner } from "../../components/ui";
-import type { Role } from "../../lib/types";
+import { Trash2 } from "lucide-react";
+import { toast } from "sonner";
+import { usersApi } from "@/lib/api";
+import { errorMessage } from "@/lib/format";
+import { useSession } from "@/lib/session";
+import { ConfirmDialog } from "@/components/confirm-dialog";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Switch } from "@/components/ui/switch";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import type { Role, User } from "@/lib/types";
 
 const roles: Role[] = ["admin", "member", "viewer"];
 
 export function UsersSettings() {
   const { isAdmin } = useSession();
   const queryClient = useQueryClient();
-  const toast = useToast();
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
   const [role, setRole] = useState<Role>("viewer");
-  const [error, setError] = useState("");
+  const [pendingRemove, setPendingRemove] = useState<User | null>(null);
 
   const users = useQuery({ queryKey: ["users"], queryFn: usersApi.list, enabled: isAdmin });
-
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ["users"] });
 
   const add = useMutation({
     mutationFn: () => usersApi.create(email, name, role),
     onSuccess: () => {
-      toast.push("success", "User added");
+      toast.success("User added");
       setEmail("");
       setName("");
       setRole("viewer");
       void invalidate();
     },
-    onError: (err) => setError(errorMessage(err)),
+    onError: (err) => toast.error(errorMessage(err)),
   });
 
   const update = useMutation({
     mutationFn: ({ id, patch }: { id: string; patch: { role?: string; disabled?: boolean } }) =>
       usersApi.update(id, patch),
     onSuccess: () => void invalidate(),
-    onError: (err) => toast.push("error", errorMessage(err)),
+    onError: (err) => toast.error(errorMessage(err)),
   });
 
   const remove = useMutation({
     mutationFn: (id: string) => usersApi.remove(id),
     onSuccess: () => {
-      toast.push("success", "User removed");
+      toast.success("User removed");
+      setPendingRemove(null);
       void invalidate();
     },
-    onError: (err) => toast.push("error", errorMessage(err)),
+    onError: (err) => toast.error(errorMessage(err)),
   });
 
-  if (!isAdmin) return <p className="text-sm text-slate-600">Only admins can manage users.</p>;
+  if (!isAdmin) return <p className="text-sm text-muted-foreground">Only admins can manage users.</p>;
 
   return (
     <div className="space-y-4">
       <Card>
-        <CardHeader title="Add user" />
-        <CardBody>
+        <CardHeader>
+          <CardTitle>Add user</CardTitle>
+          <CardDescription>Members can be added before their first sign-in.</CardDescription>
+        </CardHeader>
+        <CardContent>
           <form
-            className="grid grid-cols-1 gap-3 md:grid-cols-4"
-            onSubmit={(e) => {
-              e.preventDefault();
-              setError("");
-              add.mutate();
+            className="grid items-end gap-3 md:grid-cols-4"
+            onSubmit={(event) => {
+              event.preventDefault();
+              if (email) add.mutate();
             }}
           >
-            <Field label="Email">
-              <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
-            </Field>
-            <Field label="Name">
-              <Input value={name} onChange={(e) => setName(e.target.value)} />
-            </Field>
-            <Field label="Role">
-              <Select value={role} onChange={(e) => setRole(e.target.value as Role)}>
-                {roles.map((r) => (
-                  <option key={r} value={r}>
-                    {r}
-                  </option>
-                ))}
-              </Select>
-            </Field>
-            <div className="flex items-end">
-              <Button type="submit" disabled={add.isPending || !email}>
-                Add
-              </Button>
+            <div className="space-y-2">
+              <Label htmlFor="email">Email</Label>
+              <Input
+                id="email"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+              />
             </div>
+            <div className="space-y-2">
+              <Label htmlFor="user-name">Name</Label>
+              <Input id="user-name" value={name} onChange={(e) => setName(e.target.value)} />
+            </div>
+            <div className="space-y-2">
+              <Label>Role</Label>
+              <Select value={role} onValueChange={(value) => setRole(value as Role)}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {roles.map((r) => (
+                    <SelectItem key={r} value={r}>
+                      {r}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <Button type="submit" disabled={add.isPending || !email}>
+              Add user
+            </Button>
           </form>
-          <div className="mt-2">
-            <ErrorText>{error}</ErrorText>
-          </div>
-        </CardBody>
+        </CardContent>
       </Card>
 
       <Card>
-        <CardHeader title="Members" />
-        <CardBody className="p-0">
+        <CardHeader>
+          <CardTitle>Members</CardTitle>
+        </CardHeader>
+        <CardContent className="px-0">
           {users.isLoading ? (
-            <div className="p-4">
-              <Spinner />
+            <div className="space-y-2 px-6">
+              <Skeleton className="h-10 w-full" />
+              <Skeleton className="h-10 w-full" />
             </div>
           ) : (
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-slate-200 text-left text-xs uppercase text-slate-500">
-                  <th className="px-4 py-2">Email</th>
-                  <th className="px-4 py-2">Role</th>
-                  <th className="px-4 py-2">Status</th>
-                  <th className="px-4 py-2 text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Email</TableHead>
+                  <TableHead>Role</TableHead>
+                  <TableHead>Active</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
                 {(users.data ?? []).map((user) => (
-                  <tr key={user.id} className="border-b border-slate-100 last:border-0">
-                    <td className="px-4 py-2 text-slate-800">{user.email}</td>
-                    <td className="px-4 py-2">
+                  <TableRow key={user.id}>
+                    <TableCell className="font-medium">{user.email}</TableCell>
+                    <TableCell>
                       <Select
-                        className="w-32"
                         value={user.role}
-                        onChange={(e) => update.mutate({ id: user.id, patch: { role: e.target.value } })}
+                        onValueChange={(value) => update.mutate({ id: user.id, patch: { role: value } })}
                       >
-                        {roles.map((r) => (
-                          <option key={r} value={r}>
-                            {r}
-                          </option>
-                        ))}
+                        <SelectTrigger className="w-32">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {roles.map((r) => (
+                            <SelectItem key={r} value={r}>
+                              {r}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
                       </Select>
-                    </td>
-                    <td className="px-4 py-2 text-slate-600">{user.disabled ? "disabled" : "active"}</td>
-                    <td className="px-4 py-2 text-right">
-                      <div className="flex justify-end gap-2">
-                        <Button
-                          variant="secondary"
-                          onClick={() => update.mutate({ id: user.id, patch: { disabled: !user.disabled } })}
-                        >
-                          {user.disabled ? "Enable" : "Disable"}
-                        </Button>
-                        <Button
-                          variant="danger"
-                          onClick={() => {
-                            if (window.confirm(`Remove ${user.email}?`)) remove.mutate(user.id);
-                          }}
-                        >
-                          Remove
-                        </Button>
-                      </div>
-                    </td>
-                  </tr>
+                    </TableCell>
+                    <TableCell>
+                      <Switch
+                        checked={!user.disabled}
+                        onCheckedChange={(checked) =>
+                          update.mutate({ id: user.id, patch: { disabled: !checked } })
+                        }
+                      />
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        aria-label={`Remove ${user.email}`}
+                        onClick={() => setPendingRemove(user)}
+                      >
+                        <Trash2 />
+                      </Button>
+                    </TableCell>
+                  </TableRow>
                 ))}
-              </tbody>
-            </table>
+              </TableBody>
+            </Table>
           )}
-        </CardBody>
+        </CardContent>
       </Card>
+
+      <ConfirmDialog
+        open={pendingRemove !== null}
+        onOpenChange={(open) => {
+          if (!open) setPendingRemove(null);
+        }}
+        title={`Remove ${pendingRemove?.email ?? "user"}?`}
+        description="They will lose access immediately."
+        confirmLabel="Remove"
+        pending={remove.isPending}
+        onConfirm={() => {
+          if (pendingRemove) remove.mutate(pendingRemove.id);
+        }}
+      />
     </div>
   );
 }

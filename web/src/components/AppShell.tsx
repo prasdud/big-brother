@@ -1,26 +1,37 @@
 import { useEffect } from "react";
-import { Link, Outlet, useNavigate } from "@tanstack/react-router";
-import { useSession } from "../lib/session";
-import { useProjects } from "../lib/project";
-import { Button, Select, Spinner } from "./ui";
+import { Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
+import { Plus } from "lucide-react";
+import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
+import { Separator } from "@/components/ui/separator";
+import {
+  Breadcrumb,
+  BreadcrumbItem,
+  BreadcrumbList,
+  BreadcrumbPage,
+  BreadcrumbSeparator,
+} from "@/components/ui/breadcrumb";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Button } from "@/components/ui/button";
+import { AppSidebar } from "@/components/app-sidebar";
+import { useSession } from "@/lib/session";
+import { useProjects } from "@/lib/project";
 
-function NavLink({ to, label }: { to: string; label: string }) {
-  return (
-    <Link
-      to={to}
-      className="rounded-md px-2 py-1 text-sm text-slate-600 hover:bg-slate-100"
-      activeProps={{ className: "rounded-md px-2 py-1 text-sm font-medium bg-slate-200 text-slate-900" }}
-      activeOptions={{ exact: to === "/" }}
-    >
-      {label}
-    </Link>
-  );
-}
+const titles: Record<string, string> = {
+  "/": "Projects",
+  "/dashboard": "Dashboard",
+  "/alerts": "Alerts",
+  "/deliveries": "Deliveries",
+  "/slack": "Slack",
+  "/settings": "Settings",
+  "/users": "Users",
+  "/services/new": "New service",
+};
 
 export function AppShell() {
-  const { state, user, role, isAdmin, signOut } = useSession();
-  const { projects, project, select } = useProjects();
+  const { state, canWrite } = useSession();
+  const { project } = useProjects();
   const navigate = useNavigate();
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
 
   useEffect(() => {
     if (state === "anonymous") void navigate({ to: "/login" });
@@ -28,65 +39,51 @@ export function AppShell() {
 
   if (state === "loading") {
     return (
-      <div className="p-8">
-        <Spinner />
+      <div className="space-y-3 p-8">
+        <Skeleton className="h-8 w-56" />
+        <Skeleton className="h-40 w-full" />
       </div>
     );
   }
   if (state === "anonymous") return null;
 
+  const page = pathname.startsWith("/services/") ? "Service" : (titles[pathname] ?? "Dashboard");
+  const showNew = canWrite && Boolean(project) && pathname !== "/" && pathname !== "/services/new";
+  const showProjectCrumb = Boolean(project) && pathname !== "/";
+
   return (
-    <div className="min-h-screen bg-slate-50">
-      <header className="border-b border-slate-200 bg-white">
-        <div className="mx-auto flex max-w-5xl flex-wrap items-center gap-3 px-4 py-3">
-          <span className="text-sm font-semibold text-slate-900">big-brother</span>
-
-          {projects.length > 0 ? (
-            <Select
-              className="w-48"
-              value={project?.slug ?? ""}
-              onChange={(e) => {
-                select(e.target.value);
-                void navigate({ to: "/" });
-              }}
-            >
-              {projects.map((p) => (
-                <option key={p.slug} value={p.slug}>
-                  {p.name}
-                </option>
-              ))}
-            </Select>
+    <SidebarProvider>
+      <AppSidebar />
+      <SidebarInset>
+        <header className="flex h-14 shrink-0 items-center gap-2 border-b border-border px-4">
+          <SidebarTrigger className="-ml-1" />
+          <Separator orientation="vertical" className="mr-1 h-5" />
+          <Breadcrumb>
+            <BreadcrumbList>
+              {showProjectCrumb ? (
+                <>
+                  <BreadcrumbItem className="hidden md:block text-muted-foreground">
+                    {project?.name}
+                  </BreadcrumbItem>
+                  <BreadcrumbSeparator className="hidden md:block" />
+                </>
+              ) : null}
+              <BreadcrumbItem>
+                <BreadcrumbPage>{page}</BreadcrumbPage>
+              </BreadcrumbItem>
+            </BreadcrumbList>
+          </Breadcrumb>
+          {showNew ? (
+            <Button className="ml-auto" size="sm" onClick={() => void navigate({ to: "/services/new" })}>
+              <Plus />
+              New service
+            </Button>
           ) : null}
-
-          <nav className="flex items-center gap-1">
-            <NavLink to="/" label="Dashboard" />
-            <NavLink to="/alerts" label="Alerts" />
-            <NavLink to="/settings" label="Settings" />
-            <NavLink to="/deliveries" label="Deliveries" />
-            <NavLink to="/slack" label="Slack" />
-            {isAdmin ? <NavLink to="/users" label="Users" /> : null}
-          </nav>
-
-          <div className="ml-auto flex items-center gap-3">
-            <span className="text-xs text-slate-500">
-              {user?.email ?? "local dev"} · {role}
-            </span>
-            {state === "disabled" ? null : (
-              <Button
-                variant="secondary"
-                onClick={() => {
-                  void signOut().then(() => navigate({ to: "/login" }));
-                }}
-              >
-                Sign out
-              </Button>
-            )}
-          </div>
+        </header>
+        <div className="flex flex-1 flex-col gap-4 p-4 md:p-6">
+          <Outlet />
         </div>
-      </header>
-      <main className="mx-auto max-w-5xl px-4 py-6">
-        <Outlet />
-      </main>
-    </div>
+      </SidebarInset>
+    </SidebarProvider>
   );
 }

@@ -1,9 +1,15 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
-import { servicesApi, slackApi } from "../lib/api";
-import { errorMessage } from "../lib/format";
-import { Button, Select } from "./ui";
-import { useToast } from "./Toast";
+import { toast } from "sonner";
+import { servicesApi, slackApi } from "@/lib/api";
+import { errorMessage } from "@/lib/format";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 interface ChannelPickerProps {
   project: string;
@@ -14,7 +20,6 @@ interface ChannelPickerProps {
 
 export function ChannelPicker({ project, service, currentChannelID, canWrite }: ChannelPickerProps) {
   const queryClient = useQueryClient();
-  const toast = useToast();
 
   const status = useQuery({ queryKey: ["slack"], queryFn: slackApi.status });
   const connected = status.data?.connected ?? false;
@@ -45,26 +50,30 @@ export function ChannelPicker({ project, service, currentChannelID, canWrite }: 
         ? servicesApi.setChannel(project, service, id, name)
         : slackApi.setProjectChannel(project, id, name),
     onSuccess: () => {
-      toast.push("success", "Channel saved");
+      toast.success("Channel saved");
       invalidate();
     },
-    onError: (error) => toast.push("error", errorMessage(error)),
+    onError: (error) => toast.error(errorMessage(error)),
   });
 
   const clear = useMutation({
     mutationFn: () =>
       service ? servicesApi.clearChannel(project, service) : slackApi.clearProjectChannel(project),
     onSuccess: () => {
-      toast.push("success", "Channel cleared");
+      toast.success("Channel cleared");
       invalidate();
     },
-    onError: (error) => toast.push("error", errorMessage(error)),
+    onError: (error) => toast.error(errorMessage(error)),
   });
 
   if (!connected) {
     return (
-      <p className="text-sm text-slate-600">
-        Slack is not connected. <Link className="underline" to="/slack">Connect Slack</Link> to choose a channel.
+      <p className="text-sm text-muted-foreground">
+        Slack is not connected.{" "}
+        <Link className="text-primary underline-offset-4 hover:underline" to="/slack">
+          Connect Slack
+        </Link>{" "}
+        to choose a channel.
       </p>
     );
   }
@@ -72,24 +81,31 @@ export function ChannelPicker({ project, service, currentChannelID, canWrite }: 
   return (
     <div className="flex items-center gap-2">
       <Select
-        value={currentSlackID}
+        value={currentSlackID || "none"}
         disabled={!canWrite}
-        onChange={(e) => {
-          const channel = channels.data?.find((c) => c.id === e.target.value);
+        onValueChange={(value) => {
+          if (value === "none") {
+            if (currentSlackID) clear.mutate();
+            return;
+          }
+          const channel = channels.data?.find((c) => c.id === value);
           if (channel) save.mutate({ id: channel.id, name: channel.name });
         }}
       >
-        <option value="">No channel</option>
-        {channels.data?.map((channel) => (
-          <option key={channel.id} value={channel.id}>
-            #{channel.name}
-          </option>
-        ))}
+        <SelectTrigger className="w-64">
+          <SelectValue placeholder="No channel" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="none">No channel</SelectItem>
+          {channels.data?.map((channel) => (
+            <SelectItem key={channel.id} value={channel.id}>
+              #{channel.name}
+            </SelectItem>
+          ))}
+        </SelectContent>
       </Select>
-      {currentSlackID && canWrite ? (
-        <Button variant="secondary" onClick={() => clear.mutate()}>
-          Clear
-        </Button>
+      {save.isPending || clear.isPending ? (
+        <span className="text-xs text-muted-foreground">Saving…</span>
       ) : null}
     </div>
   );

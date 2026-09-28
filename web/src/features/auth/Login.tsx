@@ -1,7 +1,16 @@
 import { useEffect } from "react";
 import { useNavigate } from "@tanstack/react-router";
-import { useSession } from "../../lib/session";
-import { Button, Card, CardBody, Spinner } from "../../components/ui";
+import { Activity } from "lucide-react";
+import { useSession } from "@/lib/session";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
 
 export function Login() {
   const { state } = useSession();
@@ -12,19 +21,24 @@ export function Login() {
   }, [state, navigate]);
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-slate-50">
-      <Card className="w-96">
-        <CardBody className="space-y-4 text-center">
-          <h1 className="text-lg font-semibold text-slate-900">big-brother</h1>
-          <p className="text-sm text-slate-600">Sign in to manage monitoring and alerts.</p>
+    <div className="flex min-h-screen items-center justify-center bg-background p-6">
+      <Card className="w-full max-w-sm">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-h1">
+            <Activity className="size-5 text-primary" />
+            big-brother
+          </CardTitle>
+          <CardDescription>Sign in to manage monitoring and alerts.</CardDescription>
+        </CardHeader>
+        <CardContent>
           {state === "loading" ? (
-            <Spinner />
+            <Skeleton className="h-8 w-full" />
           ) : (
-            <a href="/auth/login">
-              <Button className="w-full">Sign in with Google</Button>
-            </a>
+            <Button asChild className="w-full">
+              <a href="/auth/login">Sign in with Google</a>
+            </Button>
           )}
-        </CardBody>
+        </CardContent>
       </Card>
     </div>
   );

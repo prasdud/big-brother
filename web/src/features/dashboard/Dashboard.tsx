@@ -1,62 +1,57 @@
 import { useState } from "react";
 import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { projectsApi, servicesApi } from "../../lib/api";
-import { errorMessage, serviceTarget } from "../../lib/format";
-import { useProjects } from "../../lib/project";
-import { useSession } from "../../lib/session";
-import { StateBadge } from "../../components/StateBadge";
-import { useToast } from "../../components/Toast";
-import { Button, Card, CardBody, CardHeader, ErrorText, Field, Input, Spinner } from "../../components/ui";
+import { MoreHorizontal } from "lucide-react";
+import { toast } from "sonner";
+import { servicesApi } from "@/lib/api";
+import { errorMessage, serviceTarget } from "@/lib/format";
+import { useProjects } from "@/lib/project";
+import { useSession } from "@/lib/session";
+import { StatusBadge } from "@/components/status-badge";
+import { ConfirmDialog } from "@/components/confirm-dialog";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import type { Service } from "@/lib/types";
 
-function CreateProject() {
-  const queryClient = useQueryClient();
-  const toast = useToast();
-  const { select } = useProjects();
-  const [name, setName] = useState("");
-  const [error, setError] = useState("");
-
-  const create = useMutation({
-    mutationFn: () => projectsApi.create(name),
-    onSuccess: (project) => {
-      toast.push("success", "Project created");
-      select(project.slug);
-      void queryClient.invalidateQueries({ queryKey: ["projects"] });
-    },
-    onError: (err) => setError(errorMessage(err)),
-  });
-
+function Stat({ label, value }: { label: string; value: number | string }) {
   return (
-    <Card className="mx-auto max-w-md">
-      <CardHeader title="Create your first project" />
-      <CardBody>
-        <form
-          className="space-y-3"
-          onSubmit={(e) => {
-            e.preventDefault();
-            setError("");
-            create.mutate();
-          }}
-        >
-          <Field label="Project name">
-            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Payments" />
-          </Field>
-          <ErrorText>{error}</ErrorText>
-          <Button type="submit" disabled={create.isPending || !name}>
-            Create project
-          </Button>
-        </form>
-      </CardBody>
+    <Card className="py-4">
+      <CardContent className="space-y-1">
+        <p className="text-label uppercase text-muted-foreground">{label}</p>
+        <p className="text-h1 tabular-nums">{value}</p>
+      </CardContent>
     </Card>
   );
 }
 
 export function Dashboard() {
   const { project, loading } = useProjects();
-  const { canWrite, isAdmin } = useSession();
+  const { canWrite } = useSession();
   const queryClient = useQueryClient();
-  const toast = useToast();
   const navigate = useNavigate();
+  const [pendingDelete, setPendingDelete] = useState<Service | null>(null);
 
   const slug = project?.slug ?? "";
   const services = useQuery({
@@ -77,108 +72,169 @@ export function Dashboard() {
     mutationFn: ({ name, enabled }: { name: string; enabled: boolean }) =>
       enabled ? servicesApi.pause(slug, name) : servicesApi.resume(slug, name),
     onSuccess: () => {
-      toast.push("success", "Service updated");
+      toast.success("Service updated");
       void queryClient.invalidateQueries({ queryKey: ["services", slug] });
     },
-    onError: (error) => toast.push("error", errorMessage(error)),
+    onError: (error) => toast.error(errorMessage(error)),
   });
 
   const remove = useMutation({
     mutationFn: (name: string) => servicesApi.remove(slug, name),
     onSuccess: () => {
-      toast.push("success", "Service deleted");
+      toast.success("Service deleted");
+      setPendingDelete(null);
       void queryClient.invalidateQueries({ queryKey: ["services", slug] });
     },
-    onError: (error) => toast.push("error", errorMessage(error)),
+    onError: (error) => toast.error(errorMessage(error)),
   });
 
-  if (loading) return <Spinner />;
+  if (loading) {
+    return (
+      <div className="space-y-3">
+        <Skeleton className="h-24 w-full" />
+        <Skeleton className="h-56 w-full" />
+      </div>
+    );
+  }
   if (!project) {
-    return isAdmin ? <CreateProject /> : <p className="text-sm text-slate-600">No projects yet. Ask an admin to create one.</p>;
+    return (
+      <Card>
+        <CardContent className="flex flex-col items-center gap-3 py-10">
+          <p className="text-sm text-muted-foreground">No project selected.</p>
+          <Button variant="outline" onClick={() => void navigate({ to: "/" })}>
+            Go to projects
+          </Button>
+        </CardContent>
+      </Card>
+    );
   }
 
   const rows = services.data ?? [];
+  const counts = { up: 0, down: 0, pending: 0, paused: 0 };
+  rows.forEach((service, index) => {
+    if (!service.enabled) {
+      counts.paused += 1;
+      return;
+    }
+    const state = statuses[index]?.data?.state;
+    if (state && state in counts) counts[state as keyof typeof counts] += 1;
+  });
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h1 className="text-lg font-semibold text-slate-900">{project.name}</h1>
-        {canWrite ? (
-          <Button onClick={() => void navigate({ to: "/services/new" })}>New service</Button>
-        ) : null}
+      <div>
+        <h1 className="text-h1">{project.name}</h1>
+        <p className="text-sm text-muted-foreground">Current status across your services.</p>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+        <Stat label="Up" value={counts.up} />
+        <Stat label="Down" value={counts.down} />
+        <Stat label="Pending" value={counts.pending} />
+        <Stat label="Paused" value={counts.paused} />
       </div>
 
       <Card>
-        <CardHeader title="Services" />
-        <CardBody className="p-0">
+        <CardHeader>
+          <CardTitle>Services</CardTitle>
+          <CardDescription>{rows.length} total</CardDescription>
+        </CardHeader>
+        <CardContent className="px-0">
           {services.isLoading ? (
-            <div className="p-4">
-              <Spinner />
+            <div className="space-y-2 px-6">
+              <Skeleton className="h-10 w-full" />
+              <Skeleton className="h-10 w-full" />
             </div>
           ) : rows.length === 0 ? (
-            <p className="p-4 text-sm text-slate-500">No services yet.</p>
+            <p className="px-6 pb-2 text-sm text-muted-foreground">No services yet.</p>
           ) : (
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-slate-200 text-left text-xs uppercase text-slate-500">
-                  <th className="px-4 py-2">Service</th>
-                  <th className="px-4 py-2">Target</th>
-                  <th className="px-4 py-2">Status</th>
-                  <th className="px-4 py-2 text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Service</TableHead>
+                  <TableHead>Target</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
                 {rows.map((service, index) => (
-                  <tr key={service.id} className="border-b border-slate-100 last:border-0">
-                    <td className="px-4 py-2">
+                  <TableRow key={service.id}>
+                    <TableCell>
                       <Link
-                        className="font-medium text-slate-900 hover:underline"
+                        className="font-medium hover:underline"
                         to="/services/$service"
                         params={{ service: service.slug }}
                       >
                         {service.name}
                       </Link>
-                      <span className="ml-2 text-xs uppercase text-slate-400">{service.type}</span>
-                    </td>
-                    <td className="max-w-xs truncate px-4 py-2 text-slate-600">{serviceTarget(service)}</td>
-                    <td className="px-4 py-2">
-                      <StateBadge state={service.enabled ? statuses[index]?.data?.state : "paused"} />
-                    </td>
-                    <td className="px-4 py-2 text-right">
+                      <Badge variant="outline" className="ml-2 uppercase text-muted-foreground">
+                        {service.type}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="max-w-xs truncate text-muted-foreground">
+                      {serviceTarget(service)}
+                    </TableCell>
+                    <TableCell>
+                      <StatusBadge state={service.enabled ? statuses[index]?.data?.state : "paused"} />
+                    </TableCell>
+                    <TableCell className="text-right">
                       {canWrite ? (
-                        <div className="flex justify-end gap-2">
-                          <Button
-                            variant="secondary"
-                            onClick={() => toggle.mutate({ name: service.slug, enabled: service.enabled })}
-                          >
-                            {service.enabled ? "Pause" : "Resume"}
-                          </Button>
-                          <Button
-                            variant="secondary"
-                            onClick={() => void navigate({ to: "/services/$service/edit", params: { service: service.slug } })}
-                          >
-                            Edit
-                          </Button>
-                          <Button
-                            variant="danger"
-                            onClick={() => {
-                              if (window.confirm(`Delete ${service.name}?`)) remove.mutate(service.slug);
-                            }}
-                          >
-                            Delete
-                          </Button>
-                        </div>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="icon-sm" aria-label="Actions">
+                              <MoreHorizontal />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem
+                              onClick={() => toggle.mutate({ name: service.slug, enabled: service.enabled })}
+                            >
+                              {service.enabled ? "Pause" : "Resume"}
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onClick={() =>
+                                void navigate({
+                                  to: "/services/$service/edit",
+                                  params: { service: service.slug },
+                                })
+                              }
+                            >
+                              Edit
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              variant="destructive"
+                              onClick={() => setPendingDelete(service)}
+                            >
+                              Delete
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       ) : (
-                        <span className="text-xs text-slate-400">—</span>
+                        <span className="text-xs text-muted-foreground">—</span>
                       )}
-                    </td>
-                  </tr>
+                    </TableCell>
+                  </TableRow>
                 ))}
-              </tbody>
-            </table>
+              </TableBody>
+            </Table>
           )}
-        </CardBody>
+        </CardContent>
       </Card>
+
+      <ConfirmDialog
+        open={pendingDelete !== null}
+        onOpenChange={(open) => {
+          if (!open) setPendingDelete(null);
+        }}
+        title={`Delete ${pendingDelete?.name ?? "service"}?`}
+        description="This removes the service and its check history."
+        confirmLabel="Delete"
+        pending={remove.isPending}
+        onConfirm={() => {
+          if (pendingDelete) remove.mutate(pendingDelete.slug);
+        }}
+      />
     </div>
   );
 }

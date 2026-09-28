@@ -1,13 +1,32 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useParams } from "@tanstack/react-router";
-import { servicesApi } from "../../lib/api";
-import { errorMessage } from "../../lib/format";
-import { useProjects } from "../../lib/project";
-import { useSession } from "../../lib/session";
-import { useToast } from "../../components/Toast";
-import { Button, Card, CardBody, CardHeader, ErrorText, Field, Input, Select, Spinner, Textarea } from "../../components/ui";
-import type { Service, ServiceInput, ServiceType } from "../../lib/types";
+import { toast } from "sonner";
+import { servicesApi } from "@/lib/api";
+import { errorMessage } from "@/lib/format";
+import { useProjects } from "@/lib/project";
+import { useSession } from "@/lib/session";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Separator } from "@/components/ui/separator";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Textarea } from "@/components/ui/textarea";
+import type { Service, ServiceInput, ServiceType } from "@/lib/types";
 
 const defaults: ServiceInput = {
   name: "",
@@ -54,7 +73,6 @@ export function ServiceForm() {
   const { project } = useProjects();
   const { canWrite } = useSession();
   const navigate = useNavigate();
-  const toast = useToast();
   const queryClient = useQueryClient();
   const slug = project?.slug ?? "";
 
@@ -72,128 +90,169 @@ export function ServiceForm() {
   }, [existing.data]);
 
   const save = useMutation({
-    mutationFn: () => (editing ? servicesApi.update(slug, params.service as string, form) : servicesApi.create(slug, form)),
+    mutationFn: () =>
+      editing ? servicesApi.update(slug, params.service as string, form) : servicesApi.create(slug, form),
     onSuccess: (service) => {
-      toast.push("success", editing ? "Service updated" : "Service created");
+      toast.success(editing ? "Service updated" : "Service created");
       void queryClient.invalidateQueries({ queryKey: ["services", slug] });
       void navigate({ to: "/services/$service", params: { service: service.slug } });
     },
     onError: (err) => setError(errorMessage(err)),
   });
 
-  if (!project) return <p className="text-sm text-slate-600">Select a project first.</p>;
-  if (!canWrite) return <p className="text-sm text-slate-600">You do not have permission to edit services.</p>;
-  if (editing && existing.isLoading) return <Spinner />;
+  if (!project) return <p className="text-sm text-muted-foreground">Select a project first.</p>;
+  if (!canWrite) return <p className="text-sm text-muted-foreground">You do not have permission to edit services.</p>;
+  if (editing && existing.isLoading) return <Skeleton className="h-96 w-full" />;
 
   const set = <K extends keyof ServiceInput>(key: K, value: ServiceInput[K]) =>
     setForm((current) => ({ ...current, [key]: value }));
 
   return (
-    <Card className="mx-auto max-w-2xl">
-      <CardHeader title={editing ? "Edit service" : "New service"} />
-      <CardBody>
+    <Card className="mx-auto w-full max-w-2xl">
+      <CardHeader>
+        <CardTitle>{editing ? "Edit service" : "New service"}</CardTitle>
+        <CardDescription>One service equals one check configuration.</CardDescription>
+      </CardHeader>
+      <CardContent>
         <form
-          className="space-y-4"
-          onSubmit={(e) => {
-            e.preventDefault();
+          className="space-y-6"
+          onSubmit={(event) => {
+            event.preventDefault();
             const problem = validate(form);
             setError(problem);
             if (!problem) save.mutate();
           }}
         >
-          <div className="grid grid-cols-2 gap-4">
-            <Field label="Name">
-              <Input value={form.name} onChange={(e) => set("name", e.target.value)} />
-            </Field>
-            <Field label="Type">
-              <Select value={form.type} onChange={(e) => set("type", e.target.value as ServiceType)} disabled={editing}>
-                <option value="http">HTTP</option>
-                <option value="tcp">TCP</option>
-                <option value="dns">DNS</option>
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor="name">Name</Label>
+              <Input id="name" value={form.name} onChange={(e) => set("name", e.target.value)} />
+            </div>
+            <div className="space-y-2">
+              <Label>Type</Label>
+              <Select
+                value={form.type}
+                onValueChange={(value) => set("type", value as ServiceType)}
+                disabled={editing}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="http">HTTP</SelectItem>
+                  <SelectItem value="tcp">TCP</SelectItem>
+                  <SelectItem value="dns">DNS</SelectItem>
+                </SelectContent>
               </Select>
-            </Field>
+            </div>
           </div>
 
           {form.type === "http" ? (
-            <Field label="URL" hint="Checked with a GET request; 2xx and 3xx count as up.">
-              <Input value={form.url} onChange={(e) => set("url", e.target.value)} placeholder="https://example.com/health" />
-            </Field>
+            <div className="space-y-2">
+              <Label htmlFor="url">URL</Label>
+              <Input
+                id="url"
+                value={form.url}
+                onChange={(e) => set("url", e.target.value)}
+                placeholder="https://example.com/health"
+              />
+              <p className="text-label text-muted-foreground">GET request; 2xx and 3xx count as up.</p>
+            </div>
           ) : (
-            <div className="grid grid-cols-3 gap-4">
-              <div className="col-span-2">
-                <Field label="Hostname">
-                  <Input value={form.hostname} onChange={(e) => set("hostname", e.target.value)} />
-                </Field>
+            <div className="grid gap-4 md:grid-cols-3">
+              <div className="space-y-2 md:col-span-2">
+                <Label htmlFor="hostname">Hostname</Label>
+                <Input
+                  id="hostname"
+                  value={form.hostname}
+                  onChange={(e) => set("hostname", e.target.value)}
+                />
               </div>
               {form.type === "tcp" ? (
-                <Field label="Port">
+                <div className="space-y-2">
+                  <Label htmlFor="port">Port</Label>
                   <Input
+                    id="port"
                     type="number"
                     value={form.port}
                     onChange={(e) => set("port", Number(e.target.value))}
                   />
-                </Field>
+                </div>
               ) : null}
             </div>
           )}
 
-          <div className="grid grid-cols-3 gap-4">
-            <Field label="Interval (s)">
+          <div className="grid gap-4 md:grid-cols-3">
+            <div className="space-y-2">
+              <Label htmlFor="interval">Interval (s)</Label>
               <Input
+                id="interval"
                 type="number"
                 value={form.interval_seconds}
                 onChange={(e) => set("interval_seconds", Number(e.target.value))}
               />
-            </Field>
-            <Field label="Timeout (s)">
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="timeout">Timeout (s)</Label>
               <Input
+                id="timeout"
                 type="number"
                 value={form.timeout_seconds}
                 onChange={(e) => set("timeout_seconds", Number(e.target.value))}
               />
-            </Field>
-            <Field label="Failure threshold">
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="threshold">Failure threshold</Label>
               <Input
+                id="threshold"
                 type="number"
                 value={form.failure_threshold}
                 onChange={(e) => set("failure_threshold", Number(e.target.value))}
               />
-            </Field>
+            </div>
           </div>
 
-          <details className="rounded-md border border-slate-200 p-3">
-            <summary className="cursor-pointer text-sm font-medium text-slate-700">
-              Template overrides (optional)
-            </summary>
-            <div className="mt-3 space-y-3">
-              <Field label="Down template" hint="Leave blank to use the project or built-in template.">
-                <Textarea
-                  rows={3}
-                  value={form.template_down}
-                  onChange={(e) => set("template_down", e.target.value)}
-                />
-              </Field>
-              <Field label="Recovered template">
-                <Textarea
-                  rows={3}
-                  value={form.template_recovered}
-                  onChange={(e) => set("template_recovered", e.target.value)}
-                />
-              </Field>
-            </div>
-          </details>
+          <Separator />
 
-          <ErrorText>{error}</ErrorText>
+          <div className="space-y-4">
+            <div>
+              <p className="text-sm font-medium">Template overrides</p>
+              <p className="text-label text-muted-foreground">
+                Leave blank to use the project or built-in template.
+              </p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="template-down">Down template</Label>
+              <Textarea
+                id="template-down"
+                rows={3}
+                value={form.template_down}
+                onChange={(e) => set("template_down", e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="template-recovered">Recovered template</Label>
+              <Textarea
+                id="template-recovered"
+                rows={3}
+                value={form.template_recovered}
+                onChange={(e) => set("template_recovered", e.target.value)}
+              />
+            </div>
+          </div>
+
+          {error ? <p className="text-sm text-destructive">{error}</p> : null}
+
           <div className="flex gap-2">
             <Button type="submit" disabled={save.isPending}>
               {editing ? "Save changes" : "Create service"}
             </Button>
-            <Button type="button" variant="secondary" onClick={() => void navigate({ to: "/" })}>
+            <Button type="button" variant="outline" onClick={() => void navigate({ to: "/dashboard" })}>
               Cancel
             </Button>
           </div>
         </form>
-      </CardBody>
+      </CardContent>
     </Card>
   );
 }
