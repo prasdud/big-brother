@@ -28,6 +28,10 @@ type Event struct {
 	From      State
 	To        State
 	At        time.Time
+	// Duration is the time spent in the previous state.
+	Duration time.Duration
+	// Error is the check error for a transition into down.
+	Error string
 }
 
 // Next applies one check outcome to a snapshot and returns the new snapshot.

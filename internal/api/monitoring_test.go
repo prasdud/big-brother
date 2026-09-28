@@ -29,7 +29,7 @@ func TestMonitoringEndpoints(t *testing.T) {
 	q := store.New(sqldb)
 	ws, _ := store.EnsureWorkspace(context.Background(), q, "Test")
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	h := New(q, sqldb, ws, metrics.New(), web.Handler(), nil, logger).Router()
+	h := New(q, sqldb, ws, metrics.New(), web.Handler(), nil, nil, logger).Router()
 
 	do(t, h, http.MethodPost, "/api/v1/projects", `{"name":"P"}`)
 	rec := do(t, h, http.MethodPost, "/api/v1/projects/p/services",

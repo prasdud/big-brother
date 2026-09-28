@@ -51,19 +51,21 @@ func (s *Server) createService(w http.ResponseWriter, r *http.Request) {
 
 	now := store.NowUTC()
 	svc := store.Service{
-		ID:               uuid.NewString(),
-		ProjectID:        p.ID,
-		Name:             req.Name,
-		Type:             req.Type,
-		Url:              req.URL,
-		Hostname:         req.Hostname,
-		Port:             req.Port,
-		IntervalSeconds:  req.IntervalSeconds,
-		TimeoutSeconds:   req.TimeoutSeconds,
-		FailureThreshold: req.FailureThreshold,
-		Enabled:          1,
-		CreatedAt:        now,
-		UpdatedAt:        now,
+		ID:                uuid.NewString(),
+		ProjectID:         p.ID,
+		Name:              req.Name,
+		Type:              req.Type,
+		Url:               req.URL,
+		Hostname:          req.Hostname,
+		Port:              req.Port,
+		IntervalSeconds:   req.IntervalSeconds,
+		TimeoutSeconds:    req.TimeoutSeconds,
+		FailureThreshold:  req.FailureThreshold,
+		Enabled:           1,
+		TemplateDown:      req.TemplateDown,
+		TemplateRecovered: req.TemplateRecovered,
+		CreatedAt:         now,
+		UpdatedAt:         now,
 	}
 	svc.Slug, err = s.uniqueServiceSlug(r, p.ID, slug.Make(req.Name))
 	if err != nil {
@@ -71,20 +73,22 @@ func (s *Server) createService(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := s.q.CreateService(r.Context(), store.CreateServiceParams{
-		ID:               svc.ID,
-		ProjectID:        svc.ProjectID,
-		Name:             svc.Name,
-		Slug:             svc.Slug,
-		Type:             svc.Type,
-		Url:              svc.Url,
-		Hostname:         svc.Hostname,
-		Port:             svc.Port,
-		IntervalSeconds:  svc.IntervalSeconds,
-		TimeoutSeconds:   svc.TimeoutSeconds,
-		FailureThreshold: svc.FailureThreshold,
-		Enabled:          svc.Enabled,
-		CreatedAt:        svc.CreatedAt,
-		UpdatedAt:        svc.UpdatedAt,
+		ID:                svc.ID,
+		ProjectID:         svc.ProjectID,
+		Name:              svc.Name,
+		Slug:              svc.Slug,
+		Type:              svc.Type,
+		Url:               svc.Url,
+		Hostname:          svc.Hostname,
+		Port:              svc.Port,
+		IntervalSeconds:   svc.IntervalSeconds,
+		TimeoutSeconds:    svc.TimeoutSeconds,
+		FailureThreshold:  svc.FailureThreshold,
+		Enabled:           svc.Enabled,
+		TemplateDown:      svc.TemplateDown,
+		TemplateRecovered: svc.TemplateRecovered,
+		CreatedAt:         svc.CreatedAt,
+		UpdatedAt:         svc.UpdatedAt,
 	}); err != nil {
 		serverError(w, err)
 		return
@@ -123,18 +127,22 @@ func (s *Server) updateService(w http.ResponseWriter, r *http.Request) {
 	svc.IntervalSeconds = req.IntervalSeconds
 	svc.TimeoutSeconds = req.TimeoutSeconds
 	svc.FailureThreshold = req.FailureThreshold
+	svc.TemplateDown = req.TemplateDown
+	svc.TemplateRecovered = req.TemplateRecovered
 	svc.UpdatedAt = store.NowUTC()
 
 	if err := s.q.UpdateService(r.Context(), store.UpdateServiceParams{
-		Name:             svc.Name,
-		Url:              svc.Url,
-		Hostname:         svc.Hostname,
-		Port:             svc.Port,
-		IntervalSeconds:  svc.IntervalSeconds,
-		TimeoutSeconds:   svc.TimeoutSeconds,
-		FailureThreshold: svc.FailureThreshold,
-		UpdatedAt:        svc.UpdatedAt,
-		ID:               svc.ID,
+		Name:              svc.Name,
+		Url:               svc.Url,
+		Hostname:          svc.Hostname,
+		Port:              svc.Port,
+		IntervalSeconds:   svc.IntervalSeconds,
+		TimeoutSeconds:    svc.TimeoutSeconds,
+		FailureThreshold:  svc.FailureThreshold,
+		TemplateDown:      svc.TemplateDown,
+		TemplateRecovered: svc.TemplateRecovered,
+		UpdatedAt:         svc.UpdatedAt,
+		ID:                svc.ID,
 	}); err != nil {
 		serverError(w, err)
 		return

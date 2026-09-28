@@ -8,6 +8,23 @@ import (
 	"database/sql"
 )
 
+type AlertTemplate struct {
+	ID        string
+	ProjectID string
+	Trigger   string
+	Body      string
+	CreatedAt string
+	UpdatedAt string
+}
+
+type Channel struct {
+	ID             string
+	ProjectID      string
+	Name           string
+	SlackChannelID string
+	CreatedAt      string
+}
+
 type Check struct {
 	ID         string
 	ServiceID  string
@@ -19,30 +36,43 @@ type Check struct {
 	Error      string
 }
 
+type DeliveryFailure struct {
+	ID        string
+	ProjectID string
+	ServiceID string
+	Trigger   string
+	Reason    string
+	CreatedAt string
+}
+
 type Project struct {
-	ID          string
-	WorkspaceID string
-	Name        string
-	Slug        string
-	CreatedAt   string
+	ID               string
+	WorkspaceID      string
+	Name             string
+	Slug             string
+	DefaultChannelID string
+	CreatedAt        string
 }
 
 type Service struct {
-	ID               string
-	ProjectID        string
-	Name             string
-	Slug             string
-	Type             string
-	Url              string
-	Hostname         string
-	Port             int64
-	IntervalSeconds  int64
-	TimeoutSeconds   int64
-	FailureThreshold int64
-	Enabled          int64
-	NextRunAt        sql.NullString
-	CreatedAt        string
-	UpdatedAt        string
+	ID                string
+	ProjectID         string
+	Name              string
+	Slug              string
+	Type              string
+	Url               string
+	Hostname          string
+	Port              int64
+	IntervalSeconds   int64
+	TimeoutSeconds    int64
+	FailureThreshold  int64
+	Enabled           int64
+	NextRunAt         sql.NullString
+	ChannelID         string
+	TemplateDown      string
+	TemplateRecovered string
+	CreatedAt         string
+	UpdatedAt         string
 }
 
 type ServiceState struct {
@@ -62,6 +92,14 @@ type Session struct {
 	CsrfToken string
 	ExpiresAt string
 	CreatedAt string
+}
+
+type SlackWorkspace struct {
+	WorkspaceID string
+	TeamID      string
+	TeamName    string
+	BotTokenEnc []byte
+	InstalledAt string
 }
 
 type UptimeRollup struct {

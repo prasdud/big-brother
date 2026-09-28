@@ -13,6 +13,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/prasdud/big-brother/internal/alert"
 	"github.com/prasdud/big-brother/internal/api"
 	"github.com/prasdud/big-brother/internal/auth"
 	"github.com/prasdud/big-brother/internal/check"
@@ -21,6 +22,8 @@ import (
 	"github.com/prasdud/big-brother/internal/metrics"
 	"github.com/prasdud/big-brother/internal/monitor"
 	"github.com/prasdud/big-brother/internal/scheduler"
+	"github.com/prasdud/big-brother/internal/secret"
+	"github.com/prasdud/big-brother/internal/slack"
 	"github.com/prasdud/big-brother/internal/store"
 	"github.com/prasdud/big-brother/internal/web"
 )
@@ -79,8 +82,25 @@ func run() error {
 		logger.Warn("authentication disabled: BB_GOOGLE_CLIENT_ID is not set")
 	}
 
+	var slackDeps *api.SlackDeps
+	var alerts *alert.Alerter
+	if cfg.SlackClientID != "" {
+		box, err := secret.NewBox(cfg.SecretKey)
+		if err != nil {
+			return err
+		}
+		alerts = alert.New(q, workspace.ID, box, nil, logger)
+		slackDeps = &api.SlackDeps{
+			Installer: slack.NewOAuth(cfg.SlackClientID, cfg.SlackClientSecret, cfg.SlackRedirectURL),
+			Box:       box,
+			Alerter:   alerts,
+		}
+	} else {
+		logger.Warn("slack disabled: BB_SLACK_CLIENT_ID is not set")
+	}
+
 	reg := metrics.New()
-	srv := api.New(q, sqldb, workspace, reg, web.Handler(), authSvc, logger)
+	srv := api.New(q, sqldb, workspace, reg, web.Handler(), authSvc, slackDeps, logger)
 
 	httpSrv := &http.Server{
 		Addr:              cfg.Addr,
@@ -91,12 +111,23 @@ func run() error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
+	var events chan monitor.Event
+	if alerts != nil {
+		events = make(chan monitor.Event, 64)
+	}
 	emit := func(e monitor.Event) {
 		logger.Info("state change",
 			"service_id", e.ServiceID,
 			"from", e.From,
 			"to", e.To,
 		)
+		if events != nil {
+			select {
+			case events <- e:
+			default:
+				logger.Warn("alert queue full; dropping event", "service_id", e.ServiceID)
+			}
+		}
 	}
 	mon := monitor.New(q, emit)
 	sch := scheduler.New(q, check.New(), mon, logger, cfg.CheckWorkers, cfg.RetentionDays)
@@ -112,6 +143,20 @@ func run() error {
 		defer wg.Done()
 		pruneSessions(ctx, q, logger)
 	}()
+	if events != nil {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				case e := <-events:
+					alerts.Handle(ctx, e)
+				}
+			}
+		}()
+	}
 
 	errCh := make(chan error, 1)
 	go func() {

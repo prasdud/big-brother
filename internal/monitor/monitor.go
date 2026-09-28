@@ -86,12 +86,18 @@ func (m *Monitor) Record(ctx context.Context, svc store.Service, r check.Result)
 	}
 
 	if changed && m.emit != nil {
+		var spent time.Duration
+		if !prev.LastChangeAt.IsZero() {
+			spent = now.Sub(prev.LastChangeAt)
+		}
 		m.emit(Event{
 			ServiceID: svc.ID,
 			ProjectID: svc.ProjectID,
 			From:      prev.State,
 			To:        next.State,
 			At:        now,
+			Duration:  spent,
+			Error:     r.Error,
 		})
 	}
 	return nil

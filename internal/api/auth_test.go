@@ -10,14 +10,18 @@ import (
 	"net/http/httptest"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
 
+	"github.com/prasdud/big-brother/internal/alert"
 	"github.com/prasdud/big-brother/internal/auth"
 	"github.com/prasdud/big-brother/internal/db"
 	"github.com/prasdud/big-brother/internal/metrics"
+	"github.com/prasdud/big-brother/internal/secret"
+	"github.com/prasdud/big-brother/internal/slack"
 	"github.com/prasdud/big-brother/internal/store"
 	"github.com/prasdud/big-brother/internal/web"
 )
@@ -43,12 +47,60 @@ func (f *fakeVerifier) Exchange(_ context.Context, _, nonce string) (auth.Identi
 	return f.identity, nil
 }
 
+type fakeInstaller struct {
+	install slack.Install
+	err     error
+}
+
+func (f *fakeInstaller) AuthorizeURL(state string) string {
+	return "https://slack.test/oauth?state=" + state
+}
+
+func (f *fakeInstaller) Exchange(context.Context, string) (slack.Install, error) {
+	return f.install, f.err
+}
+
+type postedMessage struct {
+	channelID string
+	text      string
+}
+
+type fakeSlackClient struct {
+	mu       sync.Mutex
+	posted   []postedMessage
+	channels []slack.Channel
+	postErr  error
+}
+
+func (f *fakeSlackClient) PostMessage(_ context.Context, channelID, text string) error {
+	if f.postErr != nil {
+		return f.postErr
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.posted = append(f.posted, postedMessage{channelID: channelID, text: text})
+	return nil
+}
+
+func (f *fakeSlackClient) ListChannels(context.Context) ([]slack.Channel, error) {
+	return f.channels, nil
+}
+
+func (f *fakeSlackClient) posts() []postedMessage {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]postedMessage(nil), f.posted...)
+}
+
 type authEnv struct {
-	h        http.Handler
-	q        *store.Queries
-	svc      *auth.Service
-	verifier *fakeVerifier
-	wsID     string
+	h           http.Handler
+	q           *store.Queries
+	svc         *auth.Service
+	verifier    *fakeVerifier
+	installer   *fakeInstaller
+	slackClient *fakeSlackClient
+	box         *secret.Box
+	wsID        string
 }
 
 func newAuthEnv(t *testing.T, cfg auth.Config) *authEnv {
@@ -73,8 +125,21 @@ func newAuthEnv(t *testing.T, cfg auth.Config) *authEnv {
 	verifier := &fakeVerifier{}
 	svc := auth.New(q, verifier, cfg)
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	h := New(q, sqldb, ws, metrics.New(), web.Handler(), svc, logger).Router()
-	return &authEnv{h: h, q: q, svc: svc, verifier: verifier, wsID: ws.ID}
+
+	box, err := secret.NewBox("test-secret-key")
+	if err != nil {
+		t.Fatalf("box: %v", err)
+	}
+	installer := &fakeInstaller{}
+	slackClient := &fakeSlackClient{}
+	alerts := alert.New(q, ws.ID, box, func(string) slack.Client { return slackClient }, logger)
+	deps := &SlackDeps{Installer: installer, Box: box, Alerter: alerts}
+
+	h := New(q, sqldb, ws, metrics.New(), web.Handler(), svc, deps, logger).Router()
+	return &authEnv{
+		h: h, q: q, svc: svc, verifier: verifier,
+		installer: installer, slackClient: slackClient, box: box, wsID: ws.ID,
+	}
 }
 
 func (e *authEnv) userSession(t *testing.T, email, role string) (token, csrf string) {

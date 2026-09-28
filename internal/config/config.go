@@ -27,6 +27,10 @@ type Config struct {
 	BootstrapAdminEmail string
 	SessionTTL          time.Duration
 	CookieSecure        bool
+
+	SlackClientID     string
+	SlackClientSecret string
+	SlackRedirectURL  string
 }
 
 // Load reads configuration from environment variables, applying defaults, and
@@ -46,8 +50,11 @@ func Load() (Config, error) {
 		AllowedEmailDomains: splitCSV(os.Getenv("BB_ALLOWED_EMAIL_DOMAINS")),
 		SessionTTL:          168 * time.Hour,
 		CookieSecure:        true,
+		SlackClientID:       os.Getenv("BB_SLACK_CLIENT_ID"),
+		SlackClientSecret:   os.Getenv("BB_SLACK_CLIENT_SECRET"),
 	}
 	c.GoogleRedirectURL = env("BB_GOOGLE_REDIRECT_URL", strings.TrimRight(c.BaseURL, "/")+"/auth/callback")
+	c.SlackRedirectURL = env("BB_SLACK_REDIRECT_URL", strings.TrimRight(c.BaseURL, "/")+"/api/v1/slack/callback")
 
 	if v, err := positiveInt("BB_RETENTION_DAYS", 30); err != nil {
 		return c, err
@@ -90,6 +97,15 @@ func Load() (Config, error) {
 		}
 		if c.GoogleRedirectURL == "" {
 			return c, fmt.Errorf("BB_GOOGLE_REDIRECT_URL could not be derived")
+		}
+	}
+
+	if c.SlackClientID != "" {
+		if c.SlackClientSecret == "" {
+			return c, fmt.Errorf("BB_SLACK_CLIENT_SECRET is required when BB_SLACK_CLIENT_ID is set")
+		}
+		if c.SecretKey == "" {
+			return c, fmt.Errorf("BB_SECRET_KEY is required when BB_SLACK_CLIENT_ID is set")
 		}
 	}
 

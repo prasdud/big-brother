@@ -32,6 +32,33 @@ func (q *Queries) CountWorkspaces(ctx context.Context) (int64, error) {
 	return count, err
 }
 
+const createDeliveryFailure = `-- name: CreateDeliveryFailure :exec
+INSERT INTO delivery_failures (id, project_id, service_id, trigger, reason, created_at)
+VALUES (?1, ?2, ?3, ?4,
+        ?5, ?6)
+`
+
+type CreateDeliveryFailureParams struct {
+	ID        string
+	ProjectID string
+	ServiceID string
+	Trigger   string
+	Reason    string
+	CreatedAt string
+}
+
+func (q *Queries) CreateDeliveryFailure(ctx context.Context, arg CreateDeliveryFailureParams) error {
+	_, err := q.db.ExecContext(ctx, createDeliveryFailure,
+		arg.ID,
+		arg.ProjectID,
+		arg.ServiceID,
+		arg.Trigger,
+		arg.Reason,
+		arg.CreatedAt,
+	)
+	return err
+}
+
 const createProject = `-- name: CreateProject :exec
 INSERT INTO projects (id, workspace_id, name, slug, created_at)
 VALUES (?1, ?2, ?3, ?4, ?5)
@@ -60,31 +87,35 @@ const createService = `-- name: CreateService :exec
 INSERT INTO services (
     id, project_id, name, slug, type, url, hostname, port,
     interval_seconds, timeout_seconds, failure_threshold, enabled,
+    template_down, template_recovered,
     created_at, updated_at
 ) VALUES (
     ?1, ?2, ?3, ?4,
     ?5, ?6, ?7, ?8,
     ?9, ?10,
     ?11, ?12,
-    ?13, ?14
+    ?13, ?14,
+    ?15, ?16
 )
 `
 
 type CreateServiceParams struct {
-	ID               string
-	ProjectID        string
-	Name             string
-	Slug             string
-	Type             string
-	Url              string
-	Hostname         string
-	Port             int64
-	IntervalSeconds  int64
-	TimeoutSeconds   int64
-	FailureThreshold int64
-	Enabled          int64
-	CreatedAt        string
-	UpdatedAt        string
+	ID                string
+	ProjectID         string
+	Name              string
+	Slug              string
+	Type              string
+	Url               string
+	Hostname          string
+	Port              int64
+	IntervalSeconds   int64
+	TimeoutSeconds    int64
+	FailureThreshold  int64
+	Enabled           int64
+	TemplateDown      string
+	TemplateRecovered string
+	CreatedAt         string
+	UpdatedAt         string
 }
 
 func (q *Queries) CreateService(ctx context.Context, arg CreateServiceParams) error {
@@ -101,6 +132,8 @@ func (q *Queries) CreateService(ctx context.Context, arg CreateServiceParams) er
 		arg.TimeoutSeconds,
 		arg.FailureThreshold,
 		arg.Enabled,
+		arg.TemplateDown,
+		arg.TemplateRecovered,
 		arg.CreatedAt,
 		arg.UpdatedAt,
 	)
@@ -195,6 +228,15 @@ func (q *Queries) CreateWorkspace(ctx context.Context, arg CreateWorkspaceParams
 	return err
 }
 
+const deleteChannel = `-- name: DeleteChannel :exec
+DELETE FROM channels WHERE id = ?1
+`
+
+func (q *Queries) DeleteChannel(ctx context.Context, id string) error {
+	_, err := q.db.ExecContext(ctx, deleteChannel, id)
+	return err
+}
+
 const deleteExpiredSessions = `-- name: DeleteExpiredSessions :execrows
 DELETE FROM sessions WHERE expires_at < ?1
 `
@@ -252,9 +294,67 @@ func (q *Queries) DeleteUser(ctx context.Context, id string) error {
 	return err
 }
 
+const getAlertTemplate = `-- name: GetAlertTemplate :one
+SELECT id, project_id, "trigger", body, created_at, updated_at FROM alert_templates
+WHERE project_id = ?1 AND trigger = ?2
+`
+
+type GetAlertTemplateParams struct {
+	ProjectID string
+	Trigger   string
+}
+
+func (q *Queries) GetAlertTemplate(ctx context.Context, arg GetAlertTemplateParams) (AlertTemplate, error) {
+	row := q.db.QueryRowContext(ctx, getAlertTemplate, arg.ProjectID, arg.Trigger)
+	var i AlertTemplate
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.Trigger,
+		&i.Body,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getChannelByID = `-- name: GetChannelByID :one
+SELECT id, project_id, name, slack_channel_id, created_at FROM channels WHERE id = ?1
+`
+
+func (q *Queries) GetChannelByID(ctx context.Context, id string) (Channel, error) {
+	row := q.db.QueryRowContext(ctx, getChannelByID, id)
+	var i Channel
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.Name,
+		&i.SlackChannelID,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const getProjectByID = `-- name: GetProjectByID :one
+SELECT id, workspace_id, name, slug, default_channel_id, created_at FROM projects WHERE id = ?1
+`
+
+func (q *Queries) GetProjectByID(ctx context.Context, id string) (Project, error) {
+	row := q.db.QueryRowContext(ctx, getProjectByID, id)
+	var i Project
+	err := row.Scan(
+		&i.ID,
+		&i.WorkspaceID,
+		&i.Name,
+		&i.Slug,
+		&i.DefaultChannelID,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const getProjectBySlug = `-- name: GetProjectBySlug :one
-SELECT id, workspace_id, name, slug, created_at
-FROM projects WHERE slug = ?1
+SELECT id, workspace_id, name, slug, default_channel_id, created_at FROM projects WHERE slug = ?1
 `
 
 func (q *Queries) GetProjectBySlug(ctx context.Context, slug string) (Project, error) {
@@ -265,13 +365,44 @@ func (q *Queries) GetProjectBySlug(ctx context.Context, slug string) (Project, e
 		&i.WorkspaceID,
 		&i.Name,
 		&i.Slug,
+		&i.DefaultChannelID,
 		&i.CreatedAt,
 	)
 	return i, err
 }
 
+const getServiceByID = `-- name: GetServiceByID :one
+SELECT id, project_id, name, slug, type, url, hostname, port, interval_seconds, timeout_seconds, failure_threshold, enabled, next_run_at, channel_id, template_down, template_recovered, created_at, updated_at FROM services WHERE id = ?1
+`
+
+func (q *Queries) GetServiceByID(ctx context.Context, id string) (Service, error) {
+	row := q.db.QueryRowContext(ctx, getServiceByID, id)
+	var i Service
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.Name,
+		&i.Slug,
+		&i.Type,
+		&i.Url,
+		&i.Hostname,
+		&i.Port,
+		&i.IntervalSeconds,
+		&i.TimeoutSeconds,
+		&i.FailureThreshold,
+		&i.Enabled,
+		&i.NextRunAt,
+		&i.ChannelID,
+		&i.TemplateDown,
+		&i.TemplateRecovered,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getServiceBySlug = `-- name: GetServiceBySlug :one
-SELECT id, project_id, name, slug, type, url, hostname, port, interval_seconds, timeout_seconds, failure_threshold, enabled, next_run_at, created_at, updated_at FROM services
+SELECT id, project_id, name, slug, type, url, hostname, port, interval_seconds, timeout_seconds, failure_threshold, enabled, next_run_at, channel_id, template_down, template_recovered, created_at, updated_at FROM services
 WHERE project_id = ?1 AND slug = ?2
 `
 
@@ -297,6 +428,9 @@ func (q *Queries) GetServiceBySlug(ctx context.Context, arg GetServiceBySlugPara
 		&i.FailureThreshold,
 		&i.Enabled,
 		&i.NextRunAt,
+		&i.ChannelID,
+		&i.TemplateDown,
+		&i.TemplateRecovered,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -336,6 +470,23 @@ func (q *Queries) GetSessionByTokenHash(ctx context.Context, tokenHash string) (
 		&i.CsrfToken,
 		&i.ExpiresAt,
 		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const getSlackWorkspace = `-- name: GetSlackWorkspace :one
+SELECT workspace_id, team_id, team_name, bot_token_enc, installed_at FROM slack_workspace WHERE workspace_id = ?1
+`
+
+func (q *Queries) GetSlackWorkspace(ctx context.Context, workspaceID string) (SlackWorkspace, error) {
+	row := q.db.QueryRowContext(ctx, getSlackWorkspace, workspaceID)
+	var i SlackWorkspace
+	err := row.Scan(
+		&i.WorkspaceID,
+		&i.TeamID,
+		&i.TeamName,
+		&i.BotTokenEnc,
+		&i.InstalledAt,
 	)
 	return i, err
 }
@@ -432,6 +583,73 @@ func (q *Queries) InsertCheck(ctx context.Context, arg InsertCheckParams) error 
 	return err
 }
 
+const listAlertTemplatesByProject = `-- name: ListAlertTemplatesByProject :many
+SELECT id, project_id, "trigger", body, created_at, updated_at FROM alert_templates WHERE project_id = ?1 ORDER BY trigger
+`
+
+func (q *Queries) ListAlertTemplatesByProject(ctx context.Context, projectID string) ([]AlertTemplate, error) {
+	rows, err := q.db.QueryContext(ctx, listAlertTemplatesByProject, projectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AlertTemplate
+	for rows.Next() {
+		var i AlertTemplate
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.Trigger,
+			&i.Body,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listChannelsByProject = `-- name: ListChannelsByProject :many
+SELECT id, project_id, name, slack_channel_id, created_at FROM channels WHERE project_id = ?1 ORDER BY name
+`
+
+func (q *Queries) ListChannelsByProject(ctx context.Context, projectID string) ([]Channel, error) {
+	rows, err := q.db.QueryContext(ctx, listChannelsByProject, projectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Channel
+	for rows.Next() {
+		var i Channel
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.Name,
+			&i.SlackChannelID,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listChecks = `-- name: ListChecks :many
 SELECT id, service_id, project_id, checked_at, status, status_code, latency_ms, error FROM checks
 WHERE service_id = ?1
@@ -485,8 +703,50 @@ func (q *Queries) ListChecks(ctx context.Context, arg ListChecksParams) ([]Check
 	return items, nil
 }
 
+const listDeliveryFailuresByProject = `-- name: ListDeliveryFailuresByProject :many
+SELECT id, project_id, service_id, "trigger", reason, created_at FROM delivery_failures
+WHERE project_id = ?1
+ORDER BY created_at DESC
+LIMIT ?2
+`
+
+type ListDeliveryFailuresByProjectParams struct {
+	ProjectID string
+	MaxRows   int64
+}
+
+func (q *Queries) ListDeliveryFailuresByProject(ctx context.Context, arg ListDeliveryFailuresByProjectParams) ([]DeliveryFailure, error) {
+	rows, err := q.db.QueryContext(ctx, listDeliveryFailuresByProject, arg.ProjectID, arg.MaxRows)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []DeliveryFailure
+	for rows.Next() {
+		var i DeliveryFailure
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.ServiceID,
+			&i.Trigger,
+			&i.Reason,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listDueServices = `-- name: ListDueServices :many
-SELECT id, project_id, name, slug, type, url, hostname, port, interval_seconds, timeout_seconds, failure_threshold, enabled, next_run_at, created_at, updated_at FROM services
+SELECT id, project_id, name, slug, type, url, hostname, port, interval_seconds, timeout_seconds, failure_threshold, enabled, next_run_at, channel_id, template_down, template_recovered, created_at, updated_at FROM services
 WHERE enabled = 1 AND (next_run_at IS NULL OR next_run_at <= ?1)
 ORDER BY COALESCE(next_run_at, '') ASC
 LIMIT ?2
@@ -520,6 +780,9 @@ func (q *Queries) ListDueServices(ctx context.Context, arg ListDueServicesParams
 			&i.FailureThreshold,
 			&i.Enabled,
 			&i.NextRunAt,
+			&i.ChannelID,
+			&i.TemplateDown,
+			&i.TemplateRecovered,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 		); err != nil {
@@ -537,7 +800,7 @@ func (q *Queries) ListDueServices(ctx context.Context, arg ListDueServicesParams
 }
 
 const listProjects = `-- name: ListProjects :many
-SELECT id, workspace_id, name, slug, created_at FROM projects ORDER BY name
+SELECT id, workspace_id, name, slug, default_channel_id, created_at FROM projects ORDER BY name
 `
 
 func (q *Queries) ListProjects(ctx context.Context) ([]Project, error) {
@@ -554,6 +817,7 @@ func (q *Queries) ListProjects(ctx context.Context) ([]Project, error) {
 			&i.WorkspaceID,
 			&i.Name,
 			&i.Slug,
+			&i.DefaultChannelID,
 			&i.CreatedAt,
 		); err != nil {
 			return nil, err
@@ -605,7 +869,7 @@ func (q *Queries) ListServiceStatesByProject(ctx context.Context, projectID stri
 }
 
 const listServices = `-- name: ListServices :many
-SELECT id, project_id, name, slug, type, url, hostname, port, interval_seconds, timeout_seconds, failure_threshold, enabled, next_run_at, created_at, updated_at FROM services WHERE project_id = ?1 ORDER BY name
+SELECT id, project_id, name, slug, type, url, hostname, port, interval_seconds, timeout_seconds, failure_threshold, enabled, next_run_at, channel_id, template_down, template_recovered, created_at, updated_at FROM services WHERE project_id = ?1 ORDER BY name
 `
 
 func (q *Queries) ListServices(ctx context.Context, projectID string) ([]Service, error) {
@@ -631,6 +895,9 @@ func (q *Queries) ListServices(ctx context.Context, projectID string) ([]Service
 			&i.FailureThreshold,
 			&i.Enabled,
 			&i.NextRunAt,
+			&i.ChannelID,
+			&i.TemplateDown,
+			&i.TemplateRecovered,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 		); err != nil {
@@ -721,6 +988,37 @@ func (q *Queries) RenameProject(ctx context.Context, arg RenameProjectParams) er
 	return err
 }
 
+const setProjectDefaultChannel = `-- name: SetProjectDefaultChannel :exec
+UPDATE projects SET default_channel_id = ?1
+WHERE id = ?2
+`
+
+type SetProjectDefaultChannelParams struct {
+	DefaultChannelID string
+	ID               string
+}
+
+func (q *Queries) SetProjectDefaultChannel(ctx context.Context, arg SetProjectDefaultChannelParams) error {
+	_, err := q.db.ExecContext(ctx, setProjectDefaultChannel, arg.DefaultChannelID, arg.ID)
+	return err
+}
+
+const setServiceChannel = `-- name: SetServiceChannel :exec
+UPDATE services SET channel_id = ?1, updated_at = ?2
+WHERE id = ?3
+`
+
+type SetServiceChannelParams struct {
+	ChannelID string
+	UpdatedAt string
+	ID        string
+}
+
+func (q *Queries) SetServiceChannel(ctx context.Context, arg SetServiceChannelParams) error {
+	_, err := q.db.ExecContext(ctx, setServiceChannel, arg.ChannelID, arg.UpdatedAt, arg.ID)
+	return err
+}
+
 const setServiceEnabled = `-- name: SetServiceEnabled :exec
 UPDATE services SET enabled = ?1, updated_at = ?2
 WHERE id = ?3
@@ -799,20 +1097,24 @@ UPDATE services SET
     interval_seconds = ?5,
     timeout_seconds = ?6,
     failure_threshold = ?7,
-    updated_at = ?8
-WHERE id = ?9
+    template_down = ?8,
+    template_recovered = ?9,
+    updated_at = ?10
+WHERE id = ?11
 `
 
 type UpdateServiceParams struct {
-	Name             string
-	Url              string
-	Hostname         string
-	Port             int64
-	IntervalSeconds  int64
-	TimeoutSeconds   int64
-	FailureThreshold int64
-	UpdatedAt        string
-	ID               string
+	Name              string
+	Url               string
+	Hostname          string
+	Port              int64
+	IntervalSeconds   int64
+	TimeoutSeconds    int64
+	FailureThreshold  int64
+	TemplateDown      string
+	TemplateRecovered string
+	UpdatedAt         string
+	ID                string
 }
 
 func (q *Queries) UpdateService(ctx context.Context, arg UpdateServiceParams) error {
@@ -824,6 +1126,8 @@ func (q *Queries) UpdateService(ctx context.Context, arg UpdateServiceParams) er
 		arg.IntervalSeconds,
 		arg.TimeoutSeconds,
 		arg.FailureThreshold,
+		arg.TemplateDown,
+		arg.TemplateRecovered,
 		arg.UpdatedAt,
 		arg.ID,
 	)
@@ -865,6 +1169,70 @@ type UpdateUserRoleParams struct {
 func (q *Queries) UpdateUserRole(ctx context.Context, arg UpdateUserRoleParams) error {
 	_, err := q.db.ExecContext(ctx, updateUserRole, arg.Role, arg.ID)
 	return err
+}
+
+const upsertAlertTemplate = `-- name: UpsertAlertTemplate :exec
+INSERT INTO alert_templates (id, project_id, trigger, body, created_at, updated_at)
+VALUES (?1, ?2, ?3, ?4,
+        ?5, ?6)
+ON CONFLICT (project_id, trigger) DO UPDATE SET
+    body = excluded.body,
+    updated_at = excluded.updated_at
+`
+
+type UpsertAlertTemplateParams struct {
+	ID        string
+	ProjectID string
+	Trigger   string
+	Body      string
+	CreatedAt string
+	UpdatedAt string
+}
+
+func (q *Queries) UpsertAlertTemplate(ctx context.Context, arg UpsertAlertTemplateParams) error {
+	_, err := q.db.ExecContext(ctx, upsertAlertTemplate,
+		arg.ID,
+		arg.ProjectID,
+		arg.Trigger,
+		arg.Body,
+		arg.CreatedAt,
+		arg.UpdatedAt,
+	)
+	return err
+}
+
+const upsertChannel = `-- name: UpsertChannel :one
+INSERT INTO channels (id, project_id, name, slack_channel_id, created_at)
+VALUES (?1, ?2, ?3, ?4, ?5)
+ON CONFLICT (project_id, slack_channel_id) DO UPDATE SET name = excluded.name
+RETURNING id, project_id, name, slack_channel_id, created_at
+`
+
+type UpsertChannelParams struct {
+	ID             string
+	ProjectID      string
+	Name           string
+	SlackChannelID string
+	CreatedAt      string
+}
+
+func (q *Queries) UpsertChannel(ctx context.Context, arg UpsertChannelParams) (Channel, error) {
+	row := q.db.QueryRowContext(ctx, upsertChannel,
+		arg.ID,
+		arg.ProjectID,
+		arg.Name,
+		arg.SlackChannelID,
+		arg.CreatedAt,
+	)
+	var i Channel
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.Name,
+		&i.SlackChannelID,
+		&i.CreatedAt,
+	)
+	return i, err
 }
 
 const upsertRollup = `-- name: UpsertRollup :exec
@@ -931,6 +1299,36 @@ func (q *Queries) UpsertServiceState(ctx context.Context, arg UpsertServiceState
 		arg.ConsecutiveSuccesses,
 		arg.LastChangeAt,
 		arg.LastCheckAt,
+	)
+	return err
+}
+
+const upsertSlackWorkspace = `-- name: UpsertSlackWorkspace :exec
+INSERT INTO slack_workspace (workspace_id, team_id, team_name, bot_token_enc, installed_at)
+VALUES (?1, ?2, ?3,
+        ?4, ?5)
+ON CONFLICT (workspace_id) DO UPDATE SET
+    team_id = excluded.team_id,
+    team_name = excluded.team_name,
+    bot_token_enc = excluded.bot_token_enc,
+    installed_at = excluded.installed_at
+`
+
+type UpsertSlackWorkspaceParams struct {
+	WorkspaceID string
+	TeamID      string
+	TeamName    string
+	BotTokenEnc []byte
+	InstalledAt string
+}
+
+func (q *Queries) UpsertSlackWorkspace(ctx context.Context, arg UpsertSlackWorkspaceParams) error {
+	_, err := q.db.ExecContext(ctx, upsertSlackWorkspace,
+		arg.WorkspaceID,
+		arg.TeamID,
+		arg.TeamName,
+		arg.BotTokenEnc,
+		arg.InstalledAt,
 	)
 	return err
 }

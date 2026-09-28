@@ -28,11 +28,12 @@ CREATE TABLE sessions (
 );
 
 CREATE TABLE projects (
-    id           TEXT PRIMARY KEY,
-    workspace_id TEXT NOT NULL REFERENCES workspace (id) ON DELETE CASCADE,
-    name         TEXT NOT NULL,
-    slug         TEXT NOT NULL UNIQUE,
-    created_at   TEXT NOT NULL
+    id                 TEXT PRIMARY KEY,
+    workspace_id       TEXT NOT NULL REFERENCES workspace (id) ON DELETE CASCADE,
+    name               TEXT NOT NULL,
+    slug               TEXT NOT NULL UNIQUE,
+    default_channel_id TEXT NOT NULL DEFAULT '',
+    created_at         TEXT NOT NULL
 );
 
 CREATE TABLE services (
@@ -49,6 +50,9 @@ CREATE TABLE services (
     failure_threshold INTEGER NOT NULL DEFAULT 3,
     enabled           INTEGER NOT NULL DEFAULT 1,
     next_run_at       TEXT,
+    channel_id        TEXT NOT NULL DEFAULT '',
+    template_down     TEXT NOT NULL DEFAULT '',
+    template_recovered TEXT NOT NULL DEFAULT '',
     created_at        TEXT NOT NULL,
     updated_at        TEXT NOT NULL,
     UNIQUE (project_id, slug)
@@ -82,4 +86,40 @@ CREATE TABLE uptime_rollups (
     up_checks    INTEGER NOT NULL DEFAULT 0,
     total_checks INTEGER NOT NULL DEFAULT 0,
     PRIMARY KEY (service_id, hour)
+);
+
+CREATE TABLE slack_workspace (
+    workspace_id  TEXT PRIMARY KEY REFERENCES workspace (id) ON DELETE CASCADE,
+    team_id       TEXT NOT NULL,
+    team_name     TEXT NOT NULL DEFAULT '',
+    bot_token_enc BLOB NOT NULL,
+    installed_at  TEXT NOT NULL
+);
+
+CREATE TABLE channels (
+    id               TEXT PRIMARY KEY,
+    project_id       TEXT NOT NULL REFERENCES projects (id) ON DELETE CASCADE,
+    name             TEXT NOT NULL DEFAULT '',
+    slack_channel_id TEXT NOT NULL,
+    created_at       TEXT NOT NULL,
+    UNIQUE (project_id, slack_channel_id)
+);
+
+CREATE TABLE alert_templates (
+    id         TEXT PRIMARY KEY,
+    project_id TEXT NOT NULL REFERENCES projects (id) ON DELETE CASCADE,
+    trigger    TEXT NOT NULL CHECK (trigger IN ('down', 'recovered')),
+    body       TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    UNIQUE (project_id, trigger)
+);
+
+CREATE TABLE delivery_failures (
+    id         TEXT PRIMARY KEY,
+    project_id TEXT NOT NULL,
+    service_id TEXT NOT NULL DEFAULT '',
+    trigger    TEXT NOT NULL DEFAULT '',
+    reason     TEXT NOT NULL,
+    created_at TEXT NOT NULL
 );

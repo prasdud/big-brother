@@ -9,11 +9,78 @@ VALUES (sqlc.arg(id), sqlc.arg(name), sqlc.arg(slug), sqlc.arg(created_at));
 SELECT id, name, slug, created_at FROM workspace LIMIT 1;
 
 -- name: ListProjects :many
-SELECT id, workspace_id, name, slug, created_at FROM projects ORDER BY name;
+SELECT * FROM projects ORDER BY name;
 
 -- name: GetProjectBySlug :one
-SELECT id, workspace_id, name, slug, created_at
-FROM projects WHERE slug = sqlc.arg(slug);
+SELECT * FROM projects WHERE slug = sqlc.arg(slug);
+
+-- name: GetProjectByID :one
+SELECT * FROM projects WHERE id = sqlc.arg(id);
+
+-- name: SetProjectDefaultChannel :exec
+UPDATE projects SET default_channel_id = sqlc.arg(default_channel_id)
+WHERE id = sqlc.arg(id);
+
+-- name: GetServiceByID :one
+SELECT * FROM services WHERE id = sqlc.arg(id);
+
+-- name: SetServiceChannel :exec
+UPDATE services SET channel_id = sqlc.arg(channel_id), updated_at = sqlc.arg(updated_at)
+WHERE id = sqlc.arg(id);
+
+-- name: UpsertChannel :one
+INSERT INTO channels (id, project_id, name, slack_channel_id, created_at)
+VALUES (sqlc.arg(id), sqlc.arg(project_id), sqlc.arg(name), sqlc.arg(slack_channel_id), sqlc.arg(created_at))
+ON CONFLICT (project_id, slack_channel_id) DO UPDATE SET name = excluded.name
+RETURNING *;
+
+-- name: GetChannelByID :one
+SELECT * FROM channels WHERE id = sqlc.arg(id);
+
+-- name: ListChannelsByProject :many
+SELECT * FROM channels WHERE project_id = sqlc.arg(project_id) ORDER BY name;
+
+-- name: DeleteChannel :exec
+DELETE FROM channels WHERE id = sqlc.arg(id);
+
+-- name: GetAlertTemplate :one
+SELECT * FROM alert_templates
+WHERE project_id = sqlc.arg(project_id) AND trigger = sqlc.arg(trigger);
+
+-- name: ListAlertTemplatesByProject :many
+SELECT * FROM alert_templates WHERE project_id = sqlc.arg(project_id) ORDER BY trigger;
+
+-- name: UpsertAlertTemplate :exec
+INSERT INTO alert_templates (id, project_id, trigger, body, created_at, updated_at)
+VALUES (sqlc.arg(id), sqlc.arg(project_id), sqlc.arg(trigger), sqlc.arg(body),
+        sqlc.arg(created_at), sqlc.arg(updated_at))
+ON CONFLICT (project_id, trigger) DO UPDATE SET
+    body = excluded.body,
+    updated_at = excluded.updated_at;
+
+-- name: UpsertSlackWorkspace :exec
+INSERT INTO slack_workspace (workspace_id, team_id, team_name, bot_token_enc, installed_at)
+VALUES (sqlc.arg(workspace_id), sqlc.arg(team_id), sqlc.arg(team_name),
+        sqlc.arg(bot_token_enc), sqlc.arg(installed_at))
+ON CONFLICT (workspace_id) DO UPDATE SET
+    team_id = excluded.team_id,
+    team_name = excluded.team_name,
+    bot_token_enc = excluded.bot_token_enc,
+    installed_at = excluded.installed_at;
+
+-- name: GetSlackWorkspace :one
+SELECT * FROM slack_workspace WHERE workspace_id = sqlc.arg(workspace_id);
+
+-- name: CreateDeliveryFailure :exec
+INSERT INTO delivery_failures (id, project_id, service_id, trigger, reason, created_at)
+VALUES (sqlc.arg(id), sqlc.arg(project_id), sqlc.arg(service_id), sqlc.arg(trigger),
+        sqlc.arg(reason), sqlc.arg(created_at));
+
+-- name: ListDeliveryFailuresByProject :many
+SELECT * FROM delivery_failures
+WHERE project_id = sqlc.arg(project_id)
+ORDER BY created_at DESC
+LIMIT sqlc.arg(max_rows);
 
 -- name: CreateProject :exec
 INSERT INTO projects (id, workspace_id, name, slug, created_at)
@@ -36,12 +103,14 @@ WHERE project_id = sqlc.arg(project_id) AND slug = sqlc.arg(slug);
 INSERT INTO services (
     id, project_id, name, slug, type, url, hostname, port,
     interval_seconds, timeout_seconds, failure_threshold, enabled,
+    template_down, template_recovered,
     created_at, updated_at
 ) VALUES (
     sqlc.arg(id), sqlc.arg(project_id), sqlc.arg(name), sqlc.arg(slug),
     sqlc.arg(type), sqlc.arg(url), sqlc.arg(hostname), sqlc.arg(port),
     sqlc.arg(interval_seconds), sqlc.arg(timeout_seconds),
     sqlc.arg(failure_threshold), sqlc.arg(enabled),
+    sqlc.arg(template_down), sqlc.arg(template_recovered),
     sqlc.arg(created_at), sqlc.arg(updated_at)
 );
 
@@ -54,6 +123,8 @@ UPDATE services SET
     interval_seconds = sqlc.arg(interval_seconds),
     timeout_seconds = sqlc.arg(timeout_seconds),
     failure_threshold = sqlc.arg(failure_threshold),
+    template_down = sqlc.arg(template_down),
+    template_recovered = sqlc.arg(template_recovered),
     updated_at = sqlc.arg(updated_at)
 WHERE id = sqlc.arg(id);
 

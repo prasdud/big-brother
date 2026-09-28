@@ -9,10 +9,20 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 
+	"github.com/prasdud/big-brother/internal/alert"
 	"github.com/prasdud/big-brother/internal/auth"
 	"github.com/prasdud/big-brother/internal/metrics"
+	"github.com/prasdud/big-brother/internal/secret"
+	"github.com/prasdud/big-brother/internal/slack"
 	"github.com/prasdud/big-brother/internal/store"
 )
+
+// SlackDeps wires the Slack integration. A nil value disables Slack routes.
+type SlackDeps struct {
+	Installer slack.Installer
+	Box       *secret.Box
+	Alerter   *alert.Alerter
+}
 
 // Server holds the dependencies for the HTTP API.
 type Server struct {
@@ -22,13 +32,14 @@ type Server struct {
 	metrics   *metrics.Registry
 	web       http.Handler
 	auth      *auth.Service
+	slack     *SlackDeps
 	requests  *metrics.Counter
 	logger    *slog.Logger
 }
 
-// New builds a Server. auth may be nil, which disables authentication (local
-// development only).
-func New(q *store.Queries, db *sql.DB, workspace store.Workspace, reg *metrics.Registry, web http.Handler, authSvc *auth.Service, logger *slog.Logger) *Server {
+// New builds a Server. auth and slack may be nil, which disables those
+// features (local development and tests).
+func New(q *store.Queries, db *sql.DB, workspace store.Workspace, reg *metrics.Registry, web http.Handler, authSvc *auth.Service, slackDeps *SlackDeps, logger *slog.Logger) *Server {
 	return &Server{
 		q:         q,
 		db:        db,
@@ -36,6 +47,7 @@ func New(q *store.Queries, db *sql.DB, workspace store.Workspace, reg *metrics.R
 		metrics:   reg,
 		web:       web,
 		auth:      authSvc,
+		slack:     slackDeps,
 		requests:  reg.Counter("bb_http_requests_total", "Total HTTP requests handled."),
 		logger:    logger,
 	}
@@ -72,6 +84,9 @@ func (s *Server) Router() http.Handler {
 			r.Use(s.auth.RequireAuth)
 			r.Use(s.auth.CSRF)
 		}
+		if s.slack != nil {
+			s.mountSlackRoutes(r)
+		}
 		r.Route("/projects", func(r chi.Router) {
 			r.Get("/", s.listProjects)
 			r.Group(func(r chi.Router) {
@@ -85,6 +100,9 @@ func (s *Server) Router() http.Handler {
 					r.Patch("/", s.renameProject)
 					r.Delete("/", s.deleteProject)
 				})
+				if s.slack != nil {
+					s.mountProjectSlackRoutes(r)
+				}
 				r.Route("/services", func(r chi.Router) {
 					r.Get("/", s.listServices)
 					r.Group(func(r chi.Router) {
@@ -96,6 +114,13 @@ func (s *Server) Router() http.Handler {
 						r.Get("/status", s.getStatus)
 						r.Get("/checks", s.listChecks)
 						r.Get("/uptime", s.getUptime)
+						if s.slack != nil {
+							r.Group(func(r chi.Router) {
+								r.Use(s.requireRole(auth.RoleMember))
+								r.Put("/channel", s.setServiceChannel)
+								r.Delete("/channel", s.clearServiceChannel)
+							})
+						}
 						r.Group(func(r chi.Router) {
 							r.Use(s.requireRole(auth.RoleMember))
 							r.Patch("/", s.updateService)
@@ -118,6 +143,34 @@ func (s *Server) Router() http.Handler {
 
 	r.NotFound(s.web.ServeHTTP)
 	return r
+}
+
+func (s *Server) mountSlackRoutes(r chi.Router) {
+	r.Route("/slack", func(r chi.Router) {
+		r.Get("/", s.slackStatus)
+		r.Group(func(r chi.Router) {
+			r.Use(s.requireRole(auth.RoleMember))
+			r.Get("/channels", s.slackChannels)
+		})
+		r.Group(func(r chi.Router) {
+			r.Use(s.requireRole(auth.RoleAdmin))
+			r.Get("/install", s.slackInstall)
+			r.Get("/callback", s.slackCallback)
+		})
+	})
+}
+
+func (s *Server) mountProjectSlackRoutes(r chi.Router) {
+	r.Group(func(r chi.Router) {
+		r.Use(s.requireRole(auth.RoleMember))
+		r.Put("/channel", s.setProjectChannel)
+		r.Delete("/channel", s.clearProjectChannel)
+		r.Put("/alert-templates/{trigger}", s.putAlertTemplate)
+		r.Post("/alert-templates/preview", s.previewAlertTemplate)
+		r.Post("/alert-templates/test-send", s.testSendAlert)
+	})
+	r.Get("/alert-templates", s.listAlertTemplates)
+	r.Get("/deliveries", s.listDeliveries)
 }
 
 // requireRole returns a role guard, or a pass-through when auth is disabled.
