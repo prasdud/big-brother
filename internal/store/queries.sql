@@ -128,6 +128,60 @@ ON CONFLICT (service_id, hour) DO UPDATE SET
     up_checks = up_checks + excluded.up_checks,
     total_checks = total_checks + excluded.total_checks;
 
+-- name: ListUsers :many
+SELECT * FROM users ORDER BY email;
+
+-- name: GetUserByID :one
+SELECT * FROM users WHERE id = sqlc.arg(id);
+
+-- name: GetUserByEmail :one
+SELECT * FROM users WHERE email = sqlc.arg(email);
+
+-- name: CreateUser :exec
+INSERT INTO users (
+    id, workspace_id, email, name, role, google_sub, disabled, created_at, last_login_at
+) VALUES (
+    sqlc.arg(id), sqlc.arg(workspace_id), sqlc.arg(email), sqlc.arg(name),
+    sqlc.arg(role), sqlc.arg(google_sub), sqlc.arg(disabled),
+    sqlc.arg(created_at), sqlc.arg(last_login_at)
+);
+
+-- name: UpdateUserRole :exec
+UPDATE users SET role = sqlc.arg(role) WHERE id = sqlc.arg(id);
+
+-- name: SetUserDisabled :exec
+UPDATE users SET disabled = sqlc.arg(disabled) WHERE id = sqlc.arg(id);
+
+-- name: DeleteUser :exec
+DELETE FROM users WHERE id = sqlc.arg(id);
+
+-- name: CountAdmins :one
+SELECT COUNT(*) FROM users WHERE role = 'admin' AND disabled = 0;
+
+-- name: UpdateUserLogin :exec
+UPDATE users SET google_sub = sqlc.arg(google_sub), name = sqlc.arg(name),
+    last_login_at = sqlc.arg(last_login_at)
+WHERE id = sqlc.arg(id);
+
+-- name: CreateSession :exec
+INSERT INTO sessions (id, user_id, token_hash, csrf_token, expires_at, created_at)
+VALUES (
+    sqlc.arg(id), sqlc.arg(user_id), sqlc.arg(token_hash), sqlc.arg(csrf_token),
+    sqlc.arg(expires_at), sqlc.arg(created_at)
+);
+
+-- name: GetSessionByTokenHash :one
+SELECT * FROM sessions WHERE token_hash = sqlc.arg(token_hash);
+
+-- name: DeleteSession :exec
+DELETE FROM sessions WHERE id = sqlc.arg(id);
+
+-- name: DeleteSessionsForUser :exec
+DELETE FROM sessions WHERE user_id = sqlc.arg(user_id);
+
+-- name: DeleteExpiredSessions :execrows
+DELETE FROM sessions WHERE expires_at < sqlc.arg(before);
+
 -- name: SumUptime :one
 SELECT
     CAST(COALESCE(SUM(up_checks), 0) AS INTEGER)    AS up_checks,

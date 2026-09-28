@@ -18,6 +18,15 @@ CREATE TABLE users (
     last_login_at TEXT
 );
 
+CREATE TABLE sessions (
+    id         TEXT PRIMARY KEY,
+    user_id    TEXT NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+    token_hash TEXT NOT NULL UNIQUE,
+    csrf_token TEXT NOT NULL,
+    expires_at TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
+
 CREATE TABLE projects (
     id           TEXT PRIMARY KEY,
     workspace_id TEXT NOT NULL REFERENCES workspace (id) ON DELETE CASCADE,

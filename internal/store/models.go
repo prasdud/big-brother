@@ -55,6 +55,15 @@ type ServiceState struct {
 	LastCheckAt          sql.NullString
 }
 
+type Session struct {
+	ID        string
+	UserID    string
+	TokenHash string
+	CsrfToken string
+	ExpiresAt string
+	CreatedAt string
+}
+
 type UptimeRollup struct {
 	ServiceID   string
 	ProjectID   string

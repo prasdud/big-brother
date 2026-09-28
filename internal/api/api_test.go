@@ -33,7 +33,7 @@ func newTestHandler(t *testing.T) http.Handler {
 		t.Fatalf("workspace: %v", err)
 	}
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	return New(q, sqldb, ws, metrics.New(), web.Handler(), logger).Router()
+	return New(q, sqldb, ws, metrics.New(), web.Handler(), nil, logger).Router()
 }
 
 func do(t *testing.T, h http.Handler, method, path, body string) *httptest.ResponseRecorder {

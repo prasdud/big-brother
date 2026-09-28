@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/prasdud/big-brother/internal/api"
+	"github.com/prasdud/big-brother/internal/auth"
 	"github.com/prasdud/big-brother/internal/check"
 	"github.com/prasdud/big-brother/internal/config"
 	"github.com/prasdud/big-brother/internal/db"
@@ -61,8 +62,25 @@ func run() error {
 		return err
 	}
 
+	var authSvc *auth.Service
+	if cfg.GoogleClientID != "" {
+		verifier, err := auth.NewOIDCVerifier(ctx, cfg.OIDCIssuer, cfg.GoogleClientID, cfg.GoogleClientSecret, cfg.GoogleRedirectURL)
+		if err != nil {
+			return err
+		}
+		authSvc = auth.New(q, verifier, auth.Config{
+			WorkspaceID:         workspace.ID,
+			AllowedDomains:      cfg.AllowedEmailDomains,
+			BootstrapAdminEmail: cfg.BootstrapAdminEmail,
+			SessionTTL:          cfg.SessionTTL,
+			CookieSecure:        cfg.CookieSecure,
+		})
+	} else {
+		logger.Warn("authentication disabled: BB_GOOGLE_CLIENT_ID is not set")
+	}
+
 	reg := metrics.New()
-	srv := api.New(q, sqldb, workspace, reg, web.Handler(), logger)
+	srv := api.New(q, sqldb, workspace, reg, web.Handler(), authSvc, logger)
 
 	httpSrv := &http.Server{
 		Addr:              cfg.Addr,
@@ -88,6 +106,11 @@ func run() error {
 	go func() {
 		defer wg.Done()
 		sch.Run(ctx)
+	}()
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		pruneSessions(ctx, q, logger)
 	}()
 
 	errCh := make(chan error, 1)
@@ -122,4 +145,22 @@ func run() error {
 	}
 	logger.Info("shutdown complete")
 	return nil
+}
+
+func pruneSessions(ctx context.Context, q *store.Queries, logger *slog.Logger) {
+	ticker := time.NewTicker(time.Hour)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			n, err := q.DeleteExpiredSessions(ctx, store.NowUTC())
+			if err != nil {
+				logger.Error("prune sessions", "error", err)
+			} else if n > 0 {
+				logger.Info("pruned sessions", "rows", n)
+			}
+		}
+	}
 }

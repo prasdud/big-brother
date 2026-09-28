@@ -10,6 +10,17 @@ import (
 	"database/sql"
 )
 
+const countAdmins = `-- name: CountAdmins :one
+SELECT COUNT(*) FROM users WHERE role = 'admin' AND disabled = 0
+`
+
+func (q *Queries) CountAdmins(ctx context.Context) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countAdmins)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countWorkspaces = `-- name: CountWorkspaces :one
 SELECT COUNT(*) FROM workspace
 `
@@ -96,6 +107,72 @@ func (q *Queries) CreateService(ctx context.Context, arg CreateServiceParams) er
 	return err
 }
 
+const createSession = `-- name: CreateSession :exec
+INSERT INTO sessions (id, user_id, token_hash, csrf_token, expires_at, created_at)
+VALUES (
+    ?1, ?2, ?3, ?4,
+    ?5, ?6
+)
+`
+
+type CreateSessionParams struct {
+	ID        string
+	UserID    string
+	TokenHash string
+	CsrfToken string
+	ExpiresAt string
+	CreatedAt string
+}
+
+func (q *Queries) CreateSession(ctx context.Context, arg CreateSessionParams) error {
+	_, err := q.db.ExecContext(ctx, createSession,
+		arg.ID,
+		arg.UserID,
+		arg.TokenHash,
+		arg.CsrfToken,
+		arg.ExpiresAt,
+		arg.CreatedAt,
+	)
+	return err
+}
+
+const createUser = `-- name: CreateUser :exec
+INSERT INTO users (
+    id, workspace_id, email, name, role, google_sub, disabled, created_at, last_login_at
+) VALUES (
+    ?1, ?2, ?3, ?4,
+    ?5, ?6, ?7,
+    ?8, ?9
+)
+`
+
+type CreateUserParams struct {
+	ID          string
+	WorkspaceID string
+	Email       string
+	Name        string
+	Role        string
+	GoogleSub   sql.NullString
+	Disabled    int64
+	CreatedAt   string
+	LastLoginAt sql.NullString
+}
+
+func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) error {
+	_, err := q.db.ExecContext(ctx, createUser,
+		arg.ID,
+		arg.WorkspaceID,
+		arg.Email,
+		arg.Name,
+		arg.Role,
+		arg.GoogleSub,
+		arg.Disabled,
+		arg.CreatedAt,
+		arg.LastLoginAt,
+	)
+	return err
+}
+
 const createWorkspace = `-- name: CreateWorkspace :exec
 INSERT INTO workspace (id, name, slug, created_at)
 VALUES (?1, ?2, ?3, ?4)
@@ -118,6 +195,18 @@ func (q *Queries) CreateWorkspace(ctx context.Context, arg CreateWorkspaceParams
 	return err
 }
 
+const deleteExpiredSessions = `-- name: DeleteExpiredSessions :execrows
+DELETE FROM sessions WHERE expires_at < ?1
+`
+
+func (q *Queries) DeleteExpiredSessions(ctx context.Context, before string) (int64, error) {
+	result, err := q.db.ExecContext(ctx, deleteExpiredSessions, before)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const deleteProject = `-- name: DeleteProject :exec
 DELETE FROM projects WHERE id = ?1
 `
@@ -133,6 +222,33 @@ DELETE FROM services WHERE id = ?1
 
 func (q *Queries) DeleteService(ctx context.Context, id string) error {
 	_, err := q.db.ExecContext(ctx, deleteService, id)
+	return err
+}
+
+const deleteSession = `-- name: DeleteSession :exec
+DELETE FROM sessions WHERE id = ?1
+`
+
+func (q *Queries) DeleteSession(ctx context.Context, id string) error {
+	_, err := q.db.ExecContext(ctx, deleteSession, id)
+	return err
+}
+
+const deleteSessionsForUser = `-- name: DeleteSessionsForUser :exec
+DELETE FROM sessions WHERE user_id = ?1
+`
+
+func (q *Queries) DeleteSessionsForUser(ctx context.Context, userID string) error {
+	_, err := q.db.ExecContext(ctx, deleteSessionsForUser, userID)
+	return err
+}
+
+const deleteUser = `-- name: DeleteUser :exec
+DELETE FROM users WHERE id = ?1
+`
+
+func (q *Queries) DeleteUser(ctx context.Context, id string) error {
+	_, err := q.db.ExecContext(ctx, deleteUser, id)
 	return err
 }
 
@@ -202,6 +318,66 @@ func (q *Queries) GetServiceState(ctx context.Context, serviceID string) (Servic
 		&i.ConsecutiveSuccesses,
 		&i.LastChangeAt,
 		&i.LastCheckAt,
+	)
+	return i, err
+}
+
+const getSessionByTokenHash = `-- name: GetSessionByTokenHash :one
+SELECT id, user_id, token_hash, csrf_token, expires_at, created_at FROM sessions WHERE token_hash = ?1
+`
+
+func (q *Queries) GetSessionByTokenHash(ctx context.Context, tokenHash string) (Session, error) {
+	row := q.db.QueryRowContext(ctx, getSessionByTokenHash, tokenHash)
+	var i Session
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.TokenHash,
+		&i.CsrfToken,
+		&i.ExpiresAt,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const getUserByEmail = `-- name: GetUserByEmail :one
+SELECT id, workspace_id, email, name, role, google_sub, disabled, created_at, last_login_at FROM users WHERE email = ?1
+`
+
+func (q *Queries) GetUserByEmail(ctx context.Context, email string) (User, error) {
+	row := q.db.QueryRowContext(ctx, getUserByEmail, email)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.WorkspaceID,
+		&i.Email,
+		&i.Name,
+		&i.Role,
+		&i.GoogleSub,
+		&i.Disabled,
+		&i.CreatedAt,
+		&i.LastLoginAt,
+	)
+	return i, err
+}
+
+const getUserByID = `-- name: GetUserByID :one
+SELECT id, workspace_id, email, name, role, google_sub, disabled, created_at, last_login_at FROM users WHERE id = ?1
+`
+
+func (q *Queries) GetUserByID(ctx context.Context, id string) (User, error) {
+	row := q.db.QueryRowContext(ctx, getUserByID, id)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.WorkspaceID,
+		&i.Email,
+		&i.Name,
+		&i.Role,
+		&i.GoogleSub,
+		&i.Disabled,
+		&i.CreatedAt,
+		&i.LastLoginAt,
 	)
 	return i, err
 }
@@ -471,6 +647,43 @@ func (q *Queries) ListServices(ctx context.Context, projectID string) ([]Service
 	return items, nil
 }
 
+const listUsers = `-- name: ListUsers :many
+SELECT id, workspace_id, email, name, role, google_sub, disabled, created_at, last_login_at FROM users ORDER BY email
+`
+
+func (q *Queries) ListUsers(ctx context.Context) ([]User, error) {
+	rows, err := q.db.QueryContext(ctx, listUsers)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []User
+	for rows.Next() {
+		var i User
+		if err := rows.Scan(
+			&i.ID,
+			&i.WorkspaceID,
+			&i.Email,
+			&i.Name,
+			&i.Role,
+			&i.GoogleSub,
+			&i.Disabled,
+			&i.CreatedAt,
+			&i.LastLoginAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const pruneChecksBefore = `-- name: PruneChecksBefore :execrows
 DELETE FROM checks
 WHERE id IN (
@@ -538,6 +751,20 @@ func (q *Queries) SetServiceNextRun(ctx context.Context, arg SetServiceNextRunPa
 	return err
 }
 
+const setUserDisabled = `-- name: SetUserDisabled :exec
+UPDATE users SET disabled = ?1 WHERE id = ?2
+`
+
+type SetUserDisabledParams struct {
+	Disabled int64
+	ID       string
+}
+
+func (q *Queries) SetUserDisabled(ctx context.Context, arg SetUserDisabledParams) error {
+	_, err := q.db.ExecContext(ctx, setUserDisabled, arg.Disabled, arg.ID)
+	return err
+}
+
 const sumUptime = `-- name: SumUptime :one
 SELECT
     CAST(COALESCE(SUM(up_checks), 0) AS INTEGER)    AS up_checks,
@@ -600,6 +827,43 @@ func (q *Queries) UpdateService(ctx context.Context, arg UpdateServiceParams) er
 		arg.UpdatedAt,
 		arg.ID,
 	)
+	return err
+}
+
+const updateUserLogin = `-- name: UpdateUserLogin :exec
+UPDATE users SET google_sub = ?1, name = ?2,
+    last_login_at = ?3
+WHERE id = ?4
+`
+
+type UpdateUserLoginParams struct {
+	GoogleSub   sql.NullString
+	Name        string
+	LastLoginAt sql.NullString
+	ID          string
+}
+
+func (q *Queries) UpdateUserLogin(ctx context.Context, arg UpdateUserLoginParams) error {
+	_, err := q.db.ExecContext(ctx, updateUserLogin,
+		arg.GoogleSub,
+		arg.Name,
+		arg.LastLoginAt,
+		arg.ID,
+	)
+	return err
+}
+
+const updateUserRole = `-- name: UpdateUserRole :exec
+UPDATE users SET role = ?1 WHERE id = ?2
+`
+
+type UpdateUserRoleParams struct {
+	Role string
+	ID   string
+}
+
+func (q *Queries) UpdateUserRole(ctx context.Context, arg UpdateUserRoleParams) error {
+	_, err := q.db.ExecContext(ctx, updateUserRole, arg.Role, arg.ID)
 	return err
 }
 
