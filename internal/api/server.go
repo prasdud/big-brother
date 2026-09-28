@@ -63,6 +63,7 @@ func (s *Server) Router() http.Handler {
 
 	r.Get("/healthz", s.health)
 	r.Handle("/metrics", s.metrics)
+	r.Get("/api/v1/openapi.json", s.openapiSpec)
 
 	if s.auth != nil {
 		r.Route("/auth", func(r chi.Router) {
@@ -146,6 +147,11 @@ func (s *Server) Router() http.Handler {
 			r.Post("/", s.createUser)
 			r.Patch("/{user}", s.updateUser)
 			r.Delete("/{user}", s.deleteUser)
+		})
+		r.Route("/import/kuma", func(r chi.Router) {
+			r.Use(s.requireRole(auth.RoleAdmin))
+			r.Post("/preview", s.kumaPreview)
+			r.Post("/apply", s.kumaApply)
 		})
 	})
 

@@ -5,7 +5,9 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/prasdud/big-brother/internal/store"
@@ -24,10 +26,9 @@ type Checker interface {
 	Check(ctx context.Context, svc store.Service) Result
 }
 
-// New returns the default checker. HTTP is the only type in M1; TCP and DNS
-// arrive in M6.
+// New returns the default checker, dispatching on the service type.
 func New() Checker {
-	return &httpChecker{client: &http.Client{
+	return &dispatcher{http: &httpChecker{client: &http.Client{
 		// Report the target's own response instead of chasing redirects.
 		CheckRedirect: func(*http.Request, []*http.Request) error {
 			return http.ErrUseLastResponse
@@ -37,7 +38,24 @@ func New() Checker {
 			MaxIdleConnsPerHost: 4,
 			IdleConnTimeout:     90 * time.Second,
 		},
-	}}
+	}}}
+}
+
+type dispatcher struct {
+	http *httpChecker
+}
+
+func (d *dispatcher) Check(ctx context.Context, svc store.Service) Result {
+	switch svc.Type {
+	case "http":
+		return d.http.Check(ctx, svc)
+	case "tcp":
+		return tcpCheck(ctx, svc)
+	case "dns":
+		return dnsCheck(ctx, svc)
+	default:
+		return Result{Error: fmt.Sprintf("unsupported check type: %s", svc.Type)}
+	}
 }
 
 type httpChecker struct {
@@ -45,12 +63,7 @@ type httpChecker struct {
 }
 
 func (h *httpChecker) Check(ctx context.Context, svc store.Service) Result {
-	if svc.Type != "http" {
-		return Result{Error: fmt.Sprintf("unsupported check type: %s", svc.Type)}
-	}
-
-	timeout := time.Duration(svc.TimeoutSeconds) * time.Second
-	ctx, cancel := context.WithTimeout(ctx, timeout)
+	ctx, cancel := context.WithTimeout(ctx, timeout(svc))
 	defer cancel()
 
 	start := time.Now()
@@ -73,6 +86,39 @@ func (h *httpChecker) Check(ctx context.Context, svc store.Service) Result {
 		res.Error = fmt.Sprintf("unexpected status %d", resp.StatusCode)
 	}
 	return res
+}
+
+func tcpCheck(ctx context.Context, svc store.Service) Result {
+	ctx, cancel := context.WithTimeout(ctx, timeout(svc))
+	defer cancel()
+
+	start := time.Now()
+	address := net.JoinHostPort(svc.Hostname, strconv.FormatInt(svc.Port, 10))
+	conn, err := (&net.Dialer{}).DialContext(ctx, "tcp", address)
+	if err != nil {
+		return Result{Error: err.Error(), LatencyMS: elapsed(start)}
+	}
+	_ = conn.Close()
+	return Result{Up: true, LatencyMS: elapsed(start)}
+}
+
+func dnsCheck(ctx context.Context, svc store.Service) Result {
+	ctx, cancel := context.WithTimeout(ctx, timeout(svc))
+	defer cancel()
+
+	start := time.Now()
+	addresses, err := net.DefaultResolver.LookupHost(ctx, svc.Hostname)
+	if err != nil {
+		return Result{Error: err.Error(), LatencyMS: elapsed(start)}
+	}
+	if len(addresses) == 0 {
+		return Result{Error: "no addresses returned", LatencyMS: elapsed(start)}
+	}
+	return Result{Up: true, LatencyMS: elapsed(start)}
+}
+
+func timeout(svc store.Service) time.Duration {
+	return time.Duration(svc.TimeoutSeconds) * time.Second
 }
 
 func elapsed(start time.Time) int64 {

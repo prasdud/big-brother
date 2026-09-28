@@ -65,6 +65,8 @@ func run() error {
 		return err
 	}
 
+	reg := metrics.New()
+
 	var authSvc *auth.Service
 	if cfg.GoogleClientID != "" {
 		verifier, err := auth.NewOIDCVerifier(ctx, cfg.OIDCIssuer, cfg.GoogleClientID, cfg.GoogleClientSecret, cfg.GoogleRedirectURL)
@@ -90,6 +92,7 @@ func run() error {
 			return err
 		}
 		alerts = alert.New(q, workspace.ID, box, nil, logger)
+		alerts.Metrics = reg
 		slackDeps = &api.SlackDeps{
 			Installer: slack.NewOAuth(cfg.SlackClientID, cfg.SlackClientSecret, cfg.SlackRedirectURL),
 			Box:       box,
@@ -99,7 +102,6 @@ func run() error {
 		logger.Warn("slack disabled: BB_SLACK_CLIENT_ID is not set")
 	}
 
-	reg := metrics.New()
 	srv := api.New(q, sqldb, workspace, reg, web.Handler(), authSvc, slackDeps, logger)
 
 	httpSrv := &http.Server{
@@ -111,11 +113,14 @@ func run() error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
+	transitions := reg.CounterVec("bb_state_transitions_total", "Service state transitions by from and to.", "from", "to")
+
 	var events chan monitor.Event
 	if alerts != nil {
 		events = make(chan monitor.Event, 64)
 	}
 	emit := func(e monitor.Event) {
+		transitions.With(string(e.From), string(e.To)).Inc()
 		logger.Info("state change",
 			"service_id", e.ServiceID,
 			"from", e.From,
@@ -130,7 +135,7 @@ func run() error {
 		}
 	}
 	mon := monitor.New(q, emit)
-	sch := scheduler.New(q, check.New(), mon, logger, cfg.CheckWorkers, cfg.RetentionDays)
+	sch := scheduler.New(q, check.New(), mon, logger, cfg.CheckWorkers, cfg.RetentionDays, reg)
 
 	var wg sync.WaitGroup
 	wg.Add(1)

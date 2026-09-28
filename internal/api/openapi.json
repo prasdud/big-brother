@@ -1,0 +1,497 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "big-brother API",
+    "version": "1.0.0",
+    "description": "Uptime monitoring and Slack alerting. All /api/v1 routes require an authenticated session; mutating requests also require the X-CSRF-Token header."
+  },
+  "servers": [{ "url": "/" }],
+  "tags": [
+    { "name": "projects" },
+    { "name": "services" },
+    { "name": "monitoring" },
+    { "name": "slack" },
+    { "name": "alerts" },
+    { "name": "users" },
+    { "name": "import" },
+    { "name": "meta" }
+  ],
+  "paths": {
+    "/api/v1/projects": {
+      "get": {
+        "tags": ["projects"],
+        "summary": "List projects",
+        "responses": {
+          "200": { "description": "Projects", "content": { "application/json": { "schema": { "type": "array", "items": { "$ref": "#/components/schemas/Project" } } } } },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      },
+      "post": {
+        "tags": ["projects"],
+        "summary": "Create a project (admin)",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/NameRequest" } } } },
+        "responses": {
+          "201": { "description": "Created", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Project" } } } },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" }
+        }
+      }
+    },
+    "/api/v1/projects/{project}": {
+      "parameters": [{ "$ref": "#/components/parameters/Project" }],
+      "get": {
+        "tags": ["projects"],
+        "summary": "Get a project",
+        "responses": {
+          "200": { "description": "Project", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Project" } } } },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      },
+      "patch": {
+        "tags": ["projects"],
+        "summary": "Rename a project (admin)",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/NameRequest" } } } },
+        "responses": {
+          "200": { "description": "Renamed", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Project" } } } },
+          "403": { "$ref": "#/components/responses/Forbidden" }
+        }
+      },
+      "delete": {
+        "tags": ["projects"],
+        "summary": "Delete a project and its services (admin)",
+        "responses": {
+          "204": { "description": "Deleted" },
+          "403": { "$ref": "#/components/responses/Forbidden" }
+        }
+      }
+    },
+    "/api/v1/projects/{project}/services": {
+      "parameters": [{ "$ref": "#/components/parameters/Project" }],
+      "get": {
+        "tags": ["services"],
+        "summary": "List services",
+        "responses": {
+          "200": { "description": "Services", "content": { "application/json": { "schema": { "type": "array", "items": { "$ref": "#/components/schemas/Service" } } } } },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      },
+      "post": {
+        "tags": ["services"],
+        "summary": "Create a service (member)",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ServiceInput" } } } },
+        "responses": {
+          "201": { "description": "Created", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Service" } } } },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "403": { "$ref": "#/components/responses/Forbidden" }
+        }
+      }
+    },
+    "/api/v1/projects/{project}/services/{service}": {
+      "parameters": [{ "$ref": "#/components/parameters/Project" }, { "$ref": "#/components/parameters/Service" }],
+      "get": {
+        "tags": ["services"],
+        "summary": "Get a service",
+        "responses": {
+          "200": { "description": "Service", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Service" } } } },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      },
+      "patch": {
+        "tags": ["services"],
+        "summary": "Update a service (member)",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ServiceInput" } } } },
+        "responses": {
+          "200": { "description": "Updated", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Service" } } } },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "403": { "$ref": "#/components/responses/Forbidden" }
+        }
+      },
+      "delete": {
+        "tags": ["services"],
+        "summary": "Delete a service (member)",
+        "responses": { "204": { "description": "Deleted" }, "403": { "$ref": "#/components/responses/Forbidden" } }
+      }
+    },
+    "/api/v1/projects/{project}/services/{service}/pause": {
+      "parameters": [{ "$ref": "#/components/parameters/Project" }, { "$ref": "#/components/parameters/Service" }],
+      "post": {
+        "tags": ["services"],
+        "summary": "Pause a service (member)",
+        "responses": { "200": { "description": "Paused", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Service" } } } }, "403": { "$ref": "#/components/responses/Forbidden" } }
+      }
+    },
+    "/api/v1/projects/{project}/services/{service}/resume": {
+      "parameters": [{ "$ref": "#/components/parameters/Project" }, { "$ref": "#/components/parameters/Service" }],
+      "post": {
+        "tags": ["services"],
+        "summary": "Resume a service (member)",
+        "responses": { "200": { "description": "Resumed", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Service" } } } }, "403": { "$ref": "#/components/responses/Forbidden" } }
+      }
+    },
+    "/api/v1/projects/{project}/services/{service}/status": {
+      "parameters": [{ "$ref": "#/components/parameters/Project" }, { "$ref": "#/components/parameters/Service" }],
+      "get": {
+        "tags": ["monitoring"],
+        "summary": "Current service status",
+        "responses": { "200": { "description": "Status", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Status" } } } } }
+      }
+    },
+    "/api/v1/projects/{project}/services/{service}/checks": {
+      "parameters": [
+        { "$ref": "#/components/parameters/Project" },
+        { "$ref": "#/components/parameters/Service" },
+        { "name": "from", "in": "query", "schema": { "type": "string", "format": "date-time" } },
+        { "name": "to", "in": "query", "schema": { "type": "string", "format": "date-time" } },
+        { "name": "limit", "in": "query", "schema": { "type": "integer", "minimum": 1, "maximum": 1000, "default": 100 } }
+      ],
+      "get": {
+        "tags": ["monitoring"],
+        "summary": "Check history",
+        "responses": { "200": { "description": "Checks", "content": { "application/json": { "schema": { "type": "array", "items": { "$ref": "#/components/schemas/Check" } } } } } }
+      }
+    },
+    "/api/v1/projects/{project}/services/{service}/uptime": {
+      "parameters": [
+        { "$ref": "#/components/parameters/Project" },
+        { "$ref": "#/components/parameters/Service" },
+        { "name": "window", "in": "query", "schema": { "type": "string", "enum": ["24h", "7d", "30d"], "default": "24h" } }
+      ],
+      "get": {
+        "tags": ["monitoring"],
+        "summary": "Uptime for a window",
+        "responses": { "200": { "description": "Uptime", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Uptime" } } } } }
+      }
+    },
+    "/api/v1/slack": {
+      "get": {
+        "tags": ["slack"],
+        "summary": "Slack connection status",
+        "responses": { "200": { "description": "Status", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SlackStatus" } } } } }
+      }
+    },
+    "/api/v1/slack/channels": {
+      "get": {
+        "tags": ["slack"],
+        "summary": "List Slack channels (member)",
+        "responses": { "200": { "description": "Channels", "content": { "application/json": { "schema": { "type": "array", "items": { "$ref": "#/components/schemas/ChannelOption" } } } } } }
+      }
+    },
+    "/api/v1/slack/install": {
+      "get": {
+        "tags": ["slack"],
+        "summary": "Start the Slack OAuth install (admin)",
+        "responses": { "302": { "description": "Redirect to Slack" }, "403": { "$ref": "#/components/responses/Forbidden" } }
+      }
+    },
+    "/api/v1/slack/callback": {
+      "get": {
+        "tags": ["slack"],
+        "summary": "Slack OAuth callback",
+        "parameters": [
+          { "name": "code", "in": "query", "required": true, "schema": { "type": "string" } },
+          { "name": "state", "in": "query", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": { "302": { "description": "Redirect to app" }, "400": { "$ref": "#/components/responses/BadRequest" } }
+      }
+    },
+    "/api/v1/projects/{project}/channel": {
+      "parameters": [{ "$ref": "#/components/parameters/Project" }],
+      "put": {
+        "tags": ["alerts"],
+        "summary": "Set the project default channel (member)",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ChannelRequest" } } } },
+        "responses": { "200": { "description": "Channel", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Channel" } } } }, "403": { "$ref": "#/components/responses/Forbidden" } }
+      },
+      "delete": {
+        "tags": ["alerts"],
+        "summary": "Clear the project default channel (member)",
+        "responses": { "204": { "description": "Cleared" }, "403": { "$ref": "#/components/responses/Forbidden" } }
+      }
+    },
+    "/api/v1/projects/{project}/channels": {
+      "parameters": [{ "$ref": "#/components/parameters/Project" }],
+      "get": {
+        "tags": ["alerts"],
+        "summary": "List a project's channels",
+        "responses": { "200": { "description": "Channels", "content": { "application/json": { "schema": { "type": "array", "items": { "$ref": "#/components/schemas/Channel" } } } } } }
+      }
+    },
+    "/api/v1/projects/{project}/services/{service}/channel": {
+      "parameters": [{ "$ref": "#/components/parameters/Project" }, { "$ref": "#/components/parameters/Service" }],
+      "put": {
+        "tags": ["alerts"],
+        "summary": "Set the service channel override (member)",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ChannelRequest" } } } },
+        "responses": { "200": { "description": "Channel", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Channel" } } } }, "403": { "$ref": "#/components/responses/Forbidden" } }
+      },
+      "delete": {
+        "tags": ["alerts"],
+        "summary": "Clear the service channel override (member)",
+        "responses": { "204": { "description": "Cleared" }, "403": { "$ref": "#/components/responses/Forbidden" } }
+      }
+    },
+    "/api/v1/projects/{project}/alert-templates": {
+      "parameters": [{ "$ref": "#/components/parameters/Project" }],
+      "get": {
+        "tags": ["alerts"],
+        "summary": "Resolved alert templates",
+        "responses": { "200": { "description": "Templates", "content": { "application/json": { "schema": { "type": "array", "items": { "$ref": "#/components/schemas/AlertTemplate" } } } } } }
+      }
+    },
+    "/api/v1/projects/{project}/alert-templates/{trigger}": {
+      "parameters": [{ "$ref": "#/components/parameters/Project" }, { "$ref": "#/components/parameters/Trigger" }],
+      "put": {
+        "tags": ["alerts"],
+        "summary": "Save a project template (member)",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/TemplateRequest" } } } },
+        "responses": { "200": { "description": "Template", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/AlertTemplate" } } } }, "403": { "$ref": "#/components/responses/Forbidden" } }
+      }
+    },
+    "/api/v1/projects/{project}/alert-templates/preview": {
+      "parameters": [{ "$ref": "#/components/parameters/Project" }],
+      "post": {
+        "tags": ["alerts"],
+        "summary": "Render a template preview (member)",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/PreviewRequest" } } } },
+        "responses": { "200": { "description": "Rendered", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Rendered" } } } } }
+      }
+    },
+    "/api/v1/projects/{project}/alert-templates/test-send": {
+      "parameters": [{ "$ref": "#/components/parameters/Project" }],
+      "post": {
+        "tags": ["alerts"],
+        "summary": "Send a test alert (member)",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/TestSendRequest" } } } },
+        "responses": { "200": { "description": "Sent" }, "502": { "$ref": "#/components/responses/BadRequest" }, "403": { "$ref": "#/components/responses/Forbidden" } }
+      }
+    },
+    "/api/v1/projects/{project}/deliveries": {
+      "parameters": [{ "$ref": "#/components/parameters/Project" }],
+      "get": {
+        "tags": ["alerts"],
+        "summary": "Recent delivery failures",
+        "responses": { "200": { "description": "Deliveries", "content": { "application/json": { "schema": { "type": "array", "items": { "$ref": "#/components/schemas/Delivery" } } } } } }
+      }
+    },
+    "/api/v1/users": {
+      "get": {
+        "tags": ["users"],
+        "summary": "List users (admin)",
+        "responses": { "200": { "description": "Users", "content": { "application/json": { "schema": { "type": "array", "items": { "$ref": "#/components/schemas/User" } } } } }, "403": { "$ref": "#/components/responses/Forbidden" } }
+      },
+      "post": {
+        "tags": ["users"],
+        "summary": "Add a user (admin)",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CreateUserRequest" } } } },
+        "responses": { "201": { "description": "Created", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/User" } } } }, "409": { "$ref": "#/components/responses/BadRequest" }, "403": { "$ref": "#/components/responses/Forbidden" } }
+      }
+    },
+    "/api/v1/users/{user}": {
+      "parameters": [{ "name": "user", "in": "path", "required": true, "schema": { "type": "string" } }],
+      "patch": {
+        "tags": ["users"],
+        "summary": "Update a user's role or disabled flag (admin)",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/UpdateUserRequest" } } } },
+        "responses": { "200": { "description": "Updated", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/User" } } } }, "403": { "$ref": "#/components/responses/Forbidden" } }
+      },
+      "delete": {
+        "tags": ["users"],
+        "summary": "Remove a user (admin)",
+        "responses": { "204": { "description": "Removed" }, "403": { "$ref": "#/components/responses/Forbidden" } }
+      }
+    },
+    "/api/v1/import/kuma/preview": {
+      "post": {
+        "tags": ["import"],
+        "summary": "Preview a Kuma import (admin)",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "additionalProperties": true } } } },
+        "responses": { "200": { "description": "Report", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ImportReport" } } } }, "400": { "$ref": "#/components/responses/BadRequest" }, "403": { "$ref": "#/components/responses/Forbidden" } }
+      }
+    },
+    "/api/v1/import/kuma/apply": {
+      "post": {
+        "tags": ["import"],
+        "summary": "Apply a Kuma import (admin)",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "additionalProperties": true } } } },
+        "responses": { "200": { "description": "Report", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ImportReport" } } } }, "400": { "$ref": "#/components/responses/BadRequest" }, "403": { "$ref": "#/components/responses/Forbidden" } }
+      }
+    },
+    "/api/v1/openapi.json": {
+      "get": {
+        "tags": ["meta"],
+        "summary": "This document",
+        "responses": { "200": { "description": "OpenAPI document" } }
+      }
+    }
+  },
+  "components": {
+    "parameters": {
+      "Project": { "name": "project", "in": "path", "required": true, "schema": { "type": "string" } },
+      "Service": { "name": "service", "in": "path", "required": true, "schema": { "type": "string" } },
+      "Trigger": { "name": "trigger", "in": "path", "required": true, "schema": { "type": "string", "enum": ["down", "recovered"] } }
+    },
+    "responses": {
+      "BadRequest": { "description": "Bad request", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+      "Unauthorized": { "description": "Unauthenticated", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+      "Forbidden": { "description": "Forbidden", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+      "NotFound": { "description": "Not found", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+    },
+    "schemas": {
+      "Error": {
+        "type": "object",
+        "properties": { "error": { "type": "object", "properties": { "code": { "type": "string" }, "message": { "type": "string" } } } }
+      },
+      "NameRequest": { "type": "object", "required": ["name"], "properties": { "name": { "type": "string" } } },
+      "Project": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "name": { "type": "string" },
+          "slug": { "type": "string" },
+          "default_channel_id": { "type": "string" },
+          "created_at": { "type": "string", "format": "date-time" }
+        }
+      },
+      "Service": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "project_id": { "type": "string" },
+          "name": { "type": "string" },
+          "slug": { "type": "string" },
+          "type": { "type": "string", "enum": ["http", "tcp", "dns"] },
+          "url": { "type": "string" },
+          "hostname": { "type": "string" },
+          "port": { "type": "integer" },
+          "interval_seconds": { "type": "integer" },
+          "timeout_seconds": { "type": "integer" },
+          "failure_threshold": { "type": "integer" },
+          "enabled": { "type": "boolean" },
+          "channel_id": { "type": "string" },
+          "template_down": { "type": "string" },
+          "template_recovered": { "type": "string" },
+          "created_at": { "type": "string", "format": "date-time" },
+          "updated_at": { "type": "string", "format": "date-time" }
+        }
+      },
+      "ServiceInput": {
+        "type": "object",
+        "required": ["name", "type"],
+        "properties": {
+          "name": { "type": "string" },
+          "type": { "type": "string", "enum": ["http", "tcp", "dns"] },
+          "url": { "type": "string" },
+          "hostname": { "type": "string" },
+          "port": { "type": "integer" },
+          "interval_seconds": { "type": "integer" },
+          "timeout_seconds": { "type": "integer" },
+          "failure_threshold": { "type": "integer" },
+          "template_down": { "type": "string" },
+          "template_recovered": { "type": "string" }
+        }
+      },
+      "Status": {
+        "type": "object",
+        "properties": {
+          "state": { "type": "string", "enum": ["up", "down", "pending", "paused"] },
+          "last_change_at": { "type": "string", "format": "date-time" },
+          "last_check_at": { "type": "string", "format": "date-time" },
+          "consecutive_failures": { "type": "integer" },
+          "consecutive_successes": { "type": "integer" }
+        }
+      },
+      "Check": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "status": { "type": "string" },
+          "status_code": { "type": "integer" },
+          "latency_ms": { "type": "integer" },
+          "error": { "type": "string" },
+          "checked_at": { "type": "string", "format": "date-time" }
+        }
+      },
+      "Uptime": {
+        "type": "object",
+        "properties": {
+          "window": { "type": "string" },
+          "up_checks": { "type": "integer" },
+          "total_checks": { "type": "integer" },
+          "percent": { "type": "number" }
+        }
+      },
+      "SlackStatus": {
+        "type": "object",
+        "properties": { "connected": { "type": "boolean" }, "team_name": { "type": "string" } }
+      },
+      "ChannelOption": {
+        "type": "object",
+        "properties": { "id": { "type": "string" }, "name": { "type": "string" } }
+      },
+      "Channel": {
+        "type": "object",
+        "properties": { "channel_id": { "type": "string" }, "slack_channel_id": { "type": "string" }, "name": { "type": "string" } }
+      },
+      "ChannelRequest": {
+        "type": "object",
+        "required": ["slack_channel_id"],
+        "properties": { "slack_channel_id": { "type": "string" }, "name": { "type": "string" } }
+      },
+      "AlertTemplate": {
+        "type": "object",
+        "properties": { "trigger": { "type": "string", "enum": ["down", "recovered"] }, "body": { "type": "string" }, "custom": { "type": "boolean" } }
+      },
+      "TemplateRequest": { "type": "object", "required": ["body"], "properties": { "body": { "type": "string" } } },
+      "PreviewRequest": { "type": "object", "properties": { "trigger": { "type": "string" }, "body": { "type": "string" } } },
+      "Rendered": { "type": "object", "properties": { "rendered": { "type": "string" } } },
+      "TestSendRequest": {
+        "type": "object",
+        "properties": { "trigger": { "type": "string" }, "body": { "type": "string" }, "channel_id": { "type": "string" } }
+      },
+      "Delivery": {
+        "type": "object",
+        "properties": { "id": { "type": "string" }, "service_id": { "type": "string" }, "trigger": { "type": "string" }, "reason": { "type": "string" }, "created_at": { "type": "string", "format": "date-time" } }
+      },
+      "User": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "email": { "type": "string" },
+          "name": { "type": "string" },
+          "role": { "type": "string", "enum": ["admin", "member", "viewer"] },
+          "disabled": { "type": "boolean" },
+          "created_at": { "type": "string", "format": "date-time" },
+          "last_login_at": { "type": "string", "format": "date-time" }
+        }
+      },
+      "CreateUserRequest": {
+        "type": "object",
+        "required": ["email", "role"],
+        "properties": { "email": { "type": "string" }, "name": { "type": "string" }, "role": { "type": "string", "enum": ["admin", "member", "viewer"] } }
+      },
+      "UpdateUserRequest": {
+        "type": "object",
+        "properties": { "role": { "type": "string", "enum": ["admin", "member", "viewer"] }, "disabled": { "type": "boolean" } }
+      },
+      "ImportReport": {
+        "type": "object",
+        "properties": {
+          "version": { "type": "string" },
+          "projects": { "type": "array", "items": { "type": "string" } },
+          "services": { "type": "array", "items": { "$ref": "#/components/schemas/ImportService" } },
+          "skipped": { "type": "array", "items": { "$ref": "#/components/schemas/ImportSkip" } },
+          "warnings": { "type": "array", "items": { "type": "string" } }
+        }
+      },
+      "ImportService": {
+        "type": "object",
+        "properties": { "name": { "type": "string" }, "project": { "type": "string" }, "type": { "type": "string" }, "action": { "type": "string" } }
+      },
+      "ImportSkip": {
+        "type": "object",
+        "properties": { "name": { "type": "string" }, "type": { "type": "string" }, "reason": { "type": "string" } }
+      }
+    }
+  }
+}

@@ -10,6 +10,7 @@ import (
 
 	"github.com/prasdud/big-brother/internal/check"
 	"github.com/prasdud/big-brother/internal/history"
+	"github.com/prasdud/big-brother/internal/metrics"
 	"github.com/prasdud/big-brother/internal/monitor"
 	"github.com/prasdud/big-brother/internal/store"
 )
@@ -27,10 +28,12 @@ type Scheduler struct {
 	logger        *slog.Logger
 	workers       int
 	retentionDays int
+	checks        *metrics.CounterVec
+	duration      *metrics.HistogramVec
 }
 
 // New builds a Scheduler.
-func New(q *store.Queries, checker check.Checker, mon *monitor.Monitor, logger *slog.Logger, workers, retentionDays int) *Scheduler {
+func New(q *store.Queries, checker check.Checker, mon *monitor.Monitor, logger *slog.Logger, workers, retentionDays int, reg *metrics.Registry) *Scheduler {
 	if workers < 1 {
 		workers = 1
 	}
@@ -41,6 +44,8 @@ func New(q *store.Queries, checker check.Checker, mon *monitor.Monitor, logger *
 		logger:        logger,
 		workers:       workers,
 		retentionDays: retentionDays,
+		checks:        reg.CounterVec("bb_checks_total", "Checks executed by type and result.", "type", "result"),
+		duration:      reg.Histogram("bb_check_duration_seconds", "Check latency in seconds.", []float64{0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10}, "type"),
 	}
 }
 
@@ -112,6 +117,12 @@ func (s *Scheduler) worker(ctx context.Context, jobs <-chan store.Service) {
 			s.logger.Error("record check", "service", svc.Slug, "error", err)
 			continue
 		}
+		outcome := "down"
+		if result.Up {
+			outcome = "up"
+		}
+		s.checks.With(svc.Type, outcome).Inc()
+		s.duration.With(svc.Type).Observe(float64(result.LatencyMS) / 1000)
 		s.logger.Debug("check",
 			"service", svc.Slug,
 			"up", result.Up,

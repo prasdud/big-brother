@@ -1,0 +1,24 @@
+display_information:
+  name: big-brother
+  description: Uptime monitoring and alerting for your team
+  background_color: "#0f172a"
+
+features:
+  bot_user:
+    display_name: big-brother
+    always_online: true
+
+oauth_config:
+  redirect_urls:
+    # Replace with your deployment's public URL + /api/v1/slack/callback
+    - https://your-host.example.com/api/v1/slack/callback
+  scopes:
+    bot:
+      - chat:write
+      - channels:read
+      - groups:read
+
+settings:
+  org_deploy_enabled: false
+  socket_mode_enabled: false
+  token_rotation_enabled: false

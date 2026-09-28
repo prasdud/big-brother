@@ -36,6 +36,16 @@ lint: vet
 sqlc:
 	sqlc generate
 
+## openapi: regenerate the TypeScript client from the OpenAPI document
+openapi:
+	cd web && npm run gen:api
+
+## openapi-check: fail if the generated client is stale
+openapi-check:
+	cd web && npm run gen:api
+	@git diff --exit-code -- web/src/lib/api/generated || \
+		(echo "generated API client is stale: run 'make openapi'"; exit 1)
+
 ## clean: remove build artifacts
 clean:
 	rm -rf $(BINARY) internal/web/dist

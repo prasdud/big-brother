@@ -10,6 +10,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/prasdud/big-brother/internal/metrics"
 	"github.com/prasdud/big-brother/internal/monitor"
 	"github.com/prasdud/big-brother/internal/secret"
 	"github.com/prasdud/big-brother/internal/slack"
@@ -24,6 +25,8 @@ type Alerter struct {
 	newClient   func(token string) slack.Client
 	logger      *slog.Logger
 	now         func() time.Time
+	// Metrics is optional; when set, delivery counters are recorded.
+	Metrics *metrics.Registry
 }
 
 // New builds an Alerter. newClient is injected so tests can avoid the network.
@@ -94,6 +97,10 @@ func (a *Alerter) Handle(ctx context.Context, e monitor.Event) {
 		a.recordFailure(ctx, svc, trigger, err.Error())
 		return
 	}
+	if a.Metrics != nil {
+		a.Metrics.CounterVec("bb_alert_deliveries_total", "Alert deliveries by trigger and result.", "trigger", "result").
+			With(trigger, "delivered").Inc()
+	}
 	a.logger.Info("alert delivered",
 		"service", svc.Slug,
 		"trigger", trigger,
@@ -151,6 +158,12 @@ func (a *Alerter) client(ctx context.Context) (slack.Client, error) {
 }
 
 func (a *Alerter) recordFailure(ctx context.Context, svc store.Service, trigger, reason string) {
+	if a.Metrics != nil {
+		a.Metrics.CounterVec("bb_alert_deliveries_total", "Alert deliveries by trigger and result.", "trigger", "result").
+			With(trigger, "failed").Inc()
+		a.Metrics.CounterVec("bb_delivery_failures_total", "Alert delivery failures by trigger.", "trigger").
+			With(trigger).Inc()
+	}
 	a.logger.Error("alert delivery failed",
 		"service", svc.Slug,
 		"trigger", trigger,
